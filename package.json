@@ -44,6 +44,8 @@
     "ai": "^6.0.0",
     "@ai-sdk/react": "^3.0.0",
     "date-fns": "4.1.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.544.0",
@@ -64,6 +66,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^22",
+    "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss": "^8.5",

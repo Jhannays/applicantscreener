@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Download,
   ChevronDown,
@@ -11,123 +11,161 @@ import {
   Users,
   CheckCircle,
   XCircle,
+  AlertTriangle,
+  Clock,
+  Briefcase,
+  GraduationCap,
+  Award,
+  Wrench,
 } from "lucide-react";
-import type { ApplicantResult } from "@/lib/types";
+import type { ApplicantResult, ExpectationCheck } from "@/lib/types";
 
 interface ResultsDashboardProps {
   results: ApplicantResult[];
+  errors: string[];
   onReset: () => void;
 }
 
-const verdictStyles: Record<string, string> = {
-  "Strong Match": "bg-emerald-500/10 text-emerald-700",
-  "Potential Match": "bg-amber-500/10 text-amber-700",
-  "Weak Match": "bg-orange-500/10 text-orange-700",
-  "No Match": "bg-red-500/10 text-red-700",
+const matchStyles: Record<string, string> = {
+  Strong: "bg-emerald-500/10 text-emerald-700",
+  Medium: "bg-amber-500/10 text-amber-700",
+  Weak: "bg-red-500/10 text-red-700",
 };
 
-function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 80
-      ? "bg-emerald-500"
-      : score >= 60
-        ? "bg-amber-500"
-        : score >= 40
-          ? "bg-orange-500"
-          : "bg-red-500";
+const statusStyles: Record<string, string> = {
+  Met: "bg-emerald-500/10 text-emerald-700",
+  "Partially Met": "bg-amber-500/10 text-amber-700",
+  "Not Evident": "bg-red-500/10 text-red-700",
+};
 
+function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 w-20 overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
-      <span className="text-xs font-medium text-foreground">{score}</span>
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/50">
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              Expectation
+            </th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              Status
+            </th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              Evidence
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {checks.map((c, i) => (
+            <tr key={i} className="border-b border-border last:border-0">
+              <td className="px-3 py-2 text-sm text-foreground">
+                {c.expectation}
+              </td>
+              <td className="px-3 py-2">
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[c.status] || ""}`}
+                >
+                  {c.status}
+                </span>
+              </td>
+              <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
+                {c.evidence || "--"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
-  );
-}
-
-function RoleEvaluationRow({
-  evaluation,
-}: {
-  evaluation: ApplicantResult["roleEvaluations"][0];
-}) {
-  return (
-    <tr className="border-b border-border last:border-0">
-      <td className="px-3 py-2 text-sm text-foreground">
-        {evaluation.company}
-      </td>
-      <td className="px-3 py-2 text-sm text-foreground">{evaluation.title}</td>
-      <td className="px-3 py-2 text-sm text-muted-foreground">
-        {evaluation.dateRange}
-      </td>
-      <td className="px-3 py-2">
-        {evaluation.isRelevant ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-            <CheckCircle className="h-3 w-3" />
-            Relevant
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <XCircle className="h-3 w-3" />
-            Not Relevant
-          </span>
-        )}
-      </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground">
-        {evaluation.relevanceReason}
-      </td>
-    </tr>
   );
 }
 
 function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
   return (
     <tr>
-      <td colSpan={6} className="border-b border-border bg-muted/20 px-4 py-4">
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+      <td colSpan={8} className="border-b border-border bg-muted/10 px-4 py-5">
+        <div className="space-y-5">
+          {/* Education / Skills / Certs */}
+          <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <h4 className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Contact
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <GraduationCap className="h-3.5 w-3.5" />
+                Education
               </h4>
-              <p className="text-sm text-foreground">
-                {result.email || "N/A"} | {result.phone || "N/A"}
-              </p>
+              {result.education.length > 0 ? (
+                <ul className="space-y-1">
+                  {result.education.map((e, i) => (
+                    <li key={i} className="text-sm text-foreground">
+                      {e.degree} -- {e.institution}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({e.startDate} - {e.endDate})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">Not available</p>
+              )}
             </div>
             <div>
-              <h4 className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Summary
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <Wrench className="h-3.5 w-3.5" />
+                Skills
               </h4>
-              <p className="text-sm text-foreground">{result.summary}</p>
+              {result.skills.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {result.skills.map((s, i) => (
+                    <span
+                      key={i}
+                      className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Not listed</p>
+              )}
+            </div>
+            <div>
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <Award className="h-3.5 w-3.5" />
+                Certifications
+              </h4>
+              {result.certifications.length > 0 ? (
+                <ul className="space-y-0.5">
+                  {result.certifications.map((c, i) => (
+                    <li key={i} className="text-sm text-foreground">
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">None listed</p>
+              )}
             </div>
           </div>
 
+          {/* Role Relevance */}
           <div>
-            <h4 className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Verdict Reason
-            </h4>
-            <p className="text-sm text-foreground">{result.verdictReason}</p>
-          </div>
-
-          <div>
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Role-by-Role Evaluation
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <Briefcase className="h-3.5 w-3.5" />
+              Role-by-Role Relevance
             </h4>
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                      Company
+                      Employer
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                       Title
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                       Dates
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                      Duration
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                       Relevant?
@@ -138,12 +176,106 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {result.roleEvaluations.map((evaluation, i) => (
-                    <RoleEvaluationRow key={i} evaluation={evaluation} />
+                  {result.roleRelevance.map((r, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="px-3 py-2 text-sm text-foreground">
+                        {r.employer}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-foreground">
+                        {r.title}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                        {r.startDate} - {r.endDate}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                        {Math.floor(r.durationMonths / 12)}y{" "}
+                        {r.durationMonths % 12}m
+                      </td>
+                      <td className="px-3 py-2">
+                        {r.isRelevant ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                            <CheckCircle className="h-3 w-3" />
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                            <XCircle className="h-3 w-3" />
+                            No
+                          </span>
+                        )}
+                      </td>
+                      <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
+                        {r.reason}
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Gap Analysis */}
+          <div>
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <Clock className="h-3.5 w-3.5" />
+              Gap Analysis
+            </h4>
+            {result.gapAnalysis.gapCount === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No employment gaps detected.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  <span>
+                    Gaps: <strong className="text-foreground">{result.gapAnalysis.gapCount}</strong>
+                  </span>
+                  <span>
+                    Largest:{" "}
+                    <strong className="text-foreground">
+                      {result.gapAnalysis.largestGapMonths} months
+                    </strong>
+                  </span>
+                  <span>
+                    Total:{" "}
+                    <strong className="text-foreground">
+                      {result.gapAnalysis.totalGapMonths} months
+                    </strong>
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {result.gapAnalysis.gaps.map((g, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 rounded bg-amber-500/5 px-2 py-1 text-xs"
+                    >
+                      <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                      <span className="text-foreground">
+                        {g.from} -- {g.to}
+                      </span>
+                      <span className="text-muted-foreground">
+                        ({g.months} month{g.months !== 1 ? "s" : ""})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Expectations */}
+          <div>
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <CheckCircle className="h-3.5 w-3.5" />
+              Job Expects vs Resume Shows
+            </h4>
+            {result.expectations.length > 0 ? (
+              <ExpectationsTable checks={result.expectations} />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No expectations data available.
+              </p>
+            )}
           </div>
         </div>
       </td>
@@ -151,17 +283,31 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
   );
 }
 
-type SortKey = "name" | "score" | "totalExp" | "relevantExp" | "verdict";
+type SortKey =
+  | "name"
+  | "reqId"
+  | "relevantExp"
+  | "totalExp"
+  | "match"
+  | "gapCount"
+  | "metCount";
 type SortDir = "asc" | "desc";
 
 export function ResultsDashboard({
   results,
+  errors,
   onReset,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortKey, setSortKey] = useState<SortKey>("relevantExp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [filter, setFilter] = useState<string>("All");
+  const [filterMatch, setFilterMatch] = useState<string>("All");
+  const [filterReqId, setFilterReqId] = useState<string>("All");
+
+  const reqIds = useMemo(
+    () => ["All", ...new Set(results.map((r) => r.reqId))],
+    [results]
+  );
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -172,90 +318,56 @@ export function ResultsDashboard({
     }
   };
 
-  const filtered =
-    filter === "All"
-      ? results
-      : results.filter((r) => r.verdict === filter);
+  const filtered = useMemo(() => {
+    let f = results;
+    if (filterMatch !== "All") f = f.filter((r) => r.overallMatch === filterMatch);
+    if (filterReqId !== "All") f = f.filter((r) => r.reqId === filterReqId);
+    return f;
+  }, [results, filterMatch, filterReqId]);
 
-  const sorted = [...filtered].sort((a, b) => {
-    const dir = sortDir === "asc" ? 1 : -1;
-    switch (sortKey) {
-      case "name":
-        return dir * a.name.localeCompare(b.name);
-      case "score":
-        return dir * (a.overallScore - b.overallScore);
-      case "totalExp":
-        return dir * (a.totalYearsExperience - b.totalYearsExperience);
-      case "relevantExp":
-        return dir * (a.relevantYearsExperience - b.relevantYearsExperience);
-      case "verdict":
-        return dir * a.verdict.localeCompare(b.verdict);
-      default:
-        return 0;
-    }
-  });
-
-  const strongCount = results.filter((r) => r.verdict === "Strong Match").length;
-  const potentialCount = results.filter((r) => r.verdict === "Potential Match").length;
-  const weakCount = results.filter((r) => r.verdict === "Weak Match").length;
-  const noMatchCount = results.filter((r) => r.verdict === "No Match").length;
-
-  const exportCSV = () => {
-    const headers = [
-      "Name",
-      "Email",
-      "Phone",
-      "Total Experience (yrs)",
-      "Relevant Experience (yrs)",
-      "Score",
-      "Verdict",
-      "Verdict Reason",
-    ];
-    const rows = results.map((r) => [
-      r.name,
-      r.email,
-      r.phone,
-      r.totalYearsExperience,
-      r.relevantYearsExperience,
-      r.overallScore,
-      r.verdict,
-      `"${r.verdictReason.replace(/"/g, '""')}"`,
-    ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    downloadFile(csv, "screening-results.csv", "text/csv");
-  };
-
-  const exportJSON = () => {
-    const json = JSON.stringify(results, null, 2);
-    downloadFile(json, "screening-results.json", "application/json");
-  };
-
-  const exportMarkdown = () => {
-    let md = "# Applicant Screening Results\n\n";
-    md += `| Name | Score | Verdict | Total Exp | Relevant Exp |\n`;
-    md += `|------|-------|---------|-----------|---------------|\n`;
-    results.forEach((r) => {
-      md += `| ${r.name} | ${r.overallScore} | ${r.verdict} | ${r.totalYearsExperience} yrs | ${r.relevantYearsExperience} yrs |\n`;
-    });
-    md += "\n## Detailed Results\n\n";
-    results.forEach((r) => {
-      md += `### ${r.name}\n\n`;
-      md += `- **Score:** ${r.overallScore}/100\n`;
-      md += `- **Verdict:** ${r.verdict}\n`;
-      md += `- **Reason:** ${r.verdictReason}\n`;
-      md += `- **Email:** ${r.email}\n`;
-      md += `- **Total Experience:** ${r.totalYearsExperience} years\n`;
-      md += `- **Relevant Experience:** ${r.relevantYearsExperience} years\n\n`;
-      if (r.roleEvaluations.length > 0) {
-        md += `#### Role Evaluations\n\n`;
-        r.roleEvaluations.forEach((ev) => {
-          md += `- **${ev.title} at ${ev.company}** (${ev.dateRange}): ${ev.isRelevant ? "Relevant" : "Not Relevant"} - ${ev.relevanceReason}\n`;
-        });
-        md += "\n";
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      switch (sortKey) {
+        case "name":
+          return dir * a.candidateName.localeCompare(b.candidateName);
+        case "reqId":
+          return dir * a.reqId.localeCompare(b.reqId);
+        case "relevantExp":
+          return (
+            dir *
+            (a.relevantYears * 12 +
+              a.relevantMonths -
+              (b.relevantYears * 12 + b.relevantMonths))
+          );
+        case "totalExp":
+          return (
+            dir *
+            (a.totalYears * 12 +
+              a.totalMonths -
+              (b.totalYears * 12 + b.totalMonths))
+          );
+        case "match": {
+          const order = { Strong: 3, Medium: 2, Weak: 1 };
+          return dir * ((order[a.overallMatch] || 0) - (order[b.overallMatch] || 0));
+        }
+        case "gapCount":
+          return dir * (a.gapAnalysis.gapCount - b.gapAnalysis.gapCount);
+        case "metCount":
+          return (
+            dir * (a.keyRequirementsMetCount - b.keyRequirementsMetCount)
+          );
+        default:
+          return 0;
       }
     });
-    downloadFile(md, "screening-results.md", "text/markdown");
-  };
+  }, [filtered, sortKey, sortDir]);
+
+  const strongCount = results.filter((r) => r.overallMatch === "Strong").length;
+  const mediumCount = results.filter((r) => r.overallMatch === "Medium").length;
+  const weakCount = results.filter((r) => r.overallMatch === "Weak").length;
+
+  // ─── Export functions ───────────────────────────────────
 
   const downloadFile = (content: string, filename: string, type: string) => {
     const blob = new Blob([content], { type });
@@ -265,6 +377,126 @@ export function ResultsDashboard({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    const headers = [
+      "req_id",
+      "resume_file",
+      "candidate_name",
+      "relevant_years",
+      "relevant_months",
+      "total_years",
+      "total_months",
+      "gap_count",
+      "largest_gap_months",
+      "total_gap_months",
+      "key_requirements_met_count",
+      "key_requirements_missing_count",
+      "overall_match",
+      "notes",
+    ];
+    const rows = results.map((r) =>
+      [
+        r.reqId,
+        r.resumeFile,
+        `"${r.candidateName.replace(/"/g, '""')}"`,
+        r.relevantYears,
+        r.relevantMonths,
+        r.totalYears,
+        r.totalMonths,
+        r.gapAnalysis.gapCount,
+        r.gapAnalysis.largestGapMonths,
+        r.gapAnalysis.totalGapMonths,
+        r.keyRequirementsMetCount,
+        r.keyRequirementsMissingCount,
+        r.overallMatch,
+        `"${r.notes.replace(/"/g, '""')}"`,
+      ].join(",")
+    );
+    downloadFile(
+      [headers.join(","), ...rows].join("\n"),
+      "all_candidates.csv",
+      "text/csv"
+    );
+  };
+
+  const exportJSON = () => {
+    downloadFile(
+      JSON.stringify(results, null, 2),
+      "all_candidates.json",
+      "application/json"
+    );
+  };
+
+  const exportMarkdown = () => {
+    let md = "# Applicant Screening Results\n\n";
+    md += `Generated: ${new Date().toISOString()}\n\n`;
+
+    // Summary table
+    md += "## Summary\n\n";
+    md += "| REQ ID | Resume | Candidate | Relevant Exp | Total Exp | Gaps | Req Met | Match |\n";
+    md += "|--------|--------|-----------|-------------|-----------|------|---------|-------|\n";
+    results.forEach((r) => {
+      md += `| ${r.reqId} | ${r.resumeFile} | ${r.candidateName} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
+    });
+
+    md += "\n---\n\n";
+
+    // Per-resume details
+    results.forEach((r) => {
+      md += `## ${r.candidateName} (REQ ${r.reqId})\n\n`;
+      md += `**File:** ${r.resumeFile}\n\n`;
+      md += `**Overall Match:** ${r.overallMatch}\n`;
+      md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
+      md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n\n`;
+
+      if (r.education.length > 0) {
+        md += "### Education\n\n";
+        r.education.forEach((e) => {
+          md += `- ${e.degree} -- ${e.institution} (${e.startDate} - ${e.endDate})\n`;
+        });
+        md += "\n";
+      }
+
+      if (r.skills.length > 0) {
+        md += `### Skills\n\n${r.skills.join(", ")}\n\n`;
+      }
+
+      if (r.certifications.length > 0) {
+        md += `### Certifications\n\n${r.certifications.join(", ")}\n\n`;
+      }
+
+      md += "### Role Relevance\n\n";
+      md += "| Employer | Title | Dates | Duration | Relevant | Reason |\n";
+      md += "|----------|-------|-------|----------|----------|--------|\n";
+      r.roleRelevance.forEach((rr) => {
+        md += `| ${rr.employer} | ${rr.title} | ${rr.startDate} - ${rr.endDate} | ${Math.floor(rr.durationMonths / 12)}y ${rr.durationMonths % 12}m | ${rr.isRelevant ? "Yes" : "No"} | ${rr.reason} |\n`;
+      });
+      md += "\n";
+
+      if (r.gapAnalysis.gapCount > 0) {
+        md += "### Gap Analysis\n\n";
+        r.gapAnalysis.gaps.forEach((g) => {
+          md += `- ${g.from} -- ${g.to} (${g.months} months)\n`;
+        });
+        md += `\nTotal gap: ${r.gapAnalysis.totalGapMonths} months | Largest: ${r.gapAnalysis.largestGapMonths} months\n\n`;
+      }
+
+      if (r.expectations.length > 0) {
+        md += "### Job Expects vs Resume Shows\n\n";
+        md += "| Expectation | Status | Evidence |\n";
+        md += "|-------------|--------|----------|\n";
+        r.expectations.forEach((e) => {
+          md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+        });
+        md += "\n";
+      }
+
+      md += "---\n\n";
+    });
+
+    downloadFile(md, "screening_results.md", "text/markdown");
   };
 
   const SortButton = ({
@@ -293,15 +525,34 @@ export function ResultsDashboard({
 
   return (
     <div className="space-y-6">
+      {/* Errors log */}
+      {errors.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+            <AlertTriangle className="h-4 w-4" />
+            Warnings
+          </h3>
+          <ul className="space-y-1">
+            {errors.map((e, i) => (
+              <li key={i} className="text-xs text-amber-700">
+                {e}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Users className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-foreground">{results.length}</p>
-            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-2xl font-bold text-foreground">
+              {results.length}
+            </p>
+            <p className="text-xs text-muted-foreground">Screened</p>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
@@ -318,17 +569,8 @@ export function ResultsDashboard({
             <FileText className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-foreground">{potentialCount}</p>
-            <p className="text-xs text-muted-foreground">Potential</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground">{weakCount}</p>
-            <p className="text-xs text-muted-foreground">Weak</p>
+            <p className="text-2xl font-bold text-foreground">{mediumCount}</p>
+            <p className="text-xs text-muted-foreground">Medium</p>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
@@ -336,8 +578,8 @@ export function ResultsDashboard({
             <XCircle className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-foreground">{noMatchCount}</p>
-            <p className="text-xs text-muted-foreground">No Match</p>
+            <p className="text-2xl font-bold text-foreground">{weakCount}</p>
+            <p className="text-xs text-muted-foreground">Weak</p>
           </div>
         </div>
       </div>
@@ -345,23 +587,39 @@ export function ResultsDashboard({
       {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
-          {["All", "Strong Match", "Potential Match", "Weak Match", "No Match"].map(
-            (v) => (
-              <button
-                key={v}
-                onClick={() => setFilter(v)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  filter === v
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                {v}
-              </button>
-            )
+          {/* Match filter */}
+          {["All", "Strong", "Medium", "Weak"].map((v) => (
+            <button
+              key={v}
+              onClick={() => setFilterMatch(v)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterMatch === v
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+
+          {/* Req ID filter */}
+          {reqIds.length > 2 && (
+            <select
+              value={filterReqId}
+              onChange={(e) => setFilterReqId(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Filter by requisition"
+            >
+              {reqIds.map((id) => (
+                <option key={id} value={id}>
+                  {id === "All" ? "All Requisitions" : `REQ ${id}`}
+                </option>
+              ))}
+            </select>
           )}
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={exportCSV}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
@@ -399,77 +657,102 @@ export function ResultsDashboard({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="w-8 px-4 py-3" />
-                <th className="px-4 py-3 text-left">
-                  <SortButton label="Applicant" sortKeyName="name" />
+                <th className="w-8 px-3 py-3" />
+                <th className="px-3 py-3 text-left">
+                  <SortButton label="REQ" sortKeyName="reqId" />
                 </th>
-                <th className="hidden px-4 py-3 text-left md:table-cell">
-                  <SortButton label="Total Exp" sortKeyName="totalExp" />
+                <th className="px-3 py-3 text-left">
+                  <SortButton label="Candidate" sortKeyName="name" />
                 </th>
-                <th className="hidden px-4 py-3 text-left md:table-cell">
+                <th className="hidden px-3 py-3 text-left md:table-cell">
                   <SortButton label="Relevant Exp" sortKeyName="relevantExp" />
                 </th>
-                <th className="px-4 py-3 text-left">
-                  <SortButton label="Score" sortKeyName="score" />
+                <th className="hidden px-3 py-3 text-left lg:table-cell">
+                  <SortButton label="Total Exp" sortKeyName="totalExp" />
                 </th>
-                <th className="px-4 py-3 text-left">
-                  <SortButton label="Verdict" sortKeyName="verdict" />
+                <th className="hidden px-3 py-3 text-left lg:table-cell">
+                  <SortButton label="Gaps" sortKeyName="gapCount" />
+                </th>
+                <th className="hidden px-3 py-3 text-left md:table-cell">
+                  <SortButton label="Req Met" sortKeyName="metCount" />
+                </th>
+                <th className="px-3 py-3 text-left">
+                  <SortButton label="Match" sortKeyName="match" />
                 </th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((result) => {
-                const isExpanded = expandedId === result.fileName;
+                const rowId = `${result.reqId}-${result.resumeFile}`;
+                const isExpanded = expandedId === rowId;
                 return (
-                  <>
+                  <tbody key={rowId}>
                     <tr
-                      key={result.fileName}
                       onClick={() =>
-                        setExpandedId(isExpanded ? null : result.fileName)
+                        setExpandedId(isExpanded ? null : rowId)
                       }
                       className="cursor-pointer border-b border-border transition-colors hover:bg-muted/30"
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         {isExpanded ? (
                           <ChevronUp className="h-4 w-4 text-muted-foreground" />
                         ) : (
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-muted-foreground">
+                        {result.reqId}
+                      </td>
+                      <td className="px-3 py-3">
                         <div>
                           <p className="font-medium text-foreground">
-                            {result.name}
+                            {result.candidateName}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {result.fileName}
+                            {result.resumeFile}
                           </p>
                         </div>
                       </td>
-                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                        {result.totalYearsExperience} yrs
+                      <td className="hidden whitespace-nowrap px-3 py-3 md:table-cell">
+                        <span className="font-semibold text-foreground">
+                          {result.relevantYears}y {result.relevantMonths}m
+                        </span>
                       </td>
-                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                        {result.relevantYearsExperience} yrs
+                      <td className="hidden whitespace-nowrap px-3 py-3 text-muted-foreground lg:table-cell">
+                        {result.totalYears}y {result.totalMonths}m
                       </td>
-                      <td className="px-4 py-3">
-                        <ScoreBar score={result.overallScore} />
+                      <td className="hidden whitespace-nowrap px-3 py-3 lg:table-cell">
+                        {result.gapAnalysis.gapCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                            <AlertTriangle className="h-3 w-3" />
+                            {result.gapAnalysis.gapCount}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">0</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden whitespace-nowrap px-3 py-3 text-xs md:table-cell">
+                        <span className="text-foreground">
+                          {result.keyRequirementsMetCount}
+                        </span>
+                        <span className="text-muted-foreground">
+                          /
+                          {result.keyRequirementsMetCount +
+                            result.keyRequirementsMissingCount}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${verdictStyles[result.verdict] || ""}`}
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${matchStyles[result.overallMatch] || ""}`}
                         >
-                          {result.verdict}
+                          {result.overallMatch}
                         </span>
                       </td>
                     </tr>
                     {isExpanded && (
-                      <ApplicantExpandedRow
-                        key={`${result.fileName}-expanded`}
-                        result={result}
-                      />
+                      <ApplicantExpandedRow result={result} />
                     )}
-                  </>
+                  </tbody>
                 );
               })}
             </tbody>
@@ -479,7 +762,7 @@ export function ResultsDashboard({
         {sorted.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <FileText className="mb-2 h-8 w-8" />
-            <p className="text-sm">No results match this filter.</p>
+            <p className="text-sm">No results match the current filters.</p>
           </div>
         )}
       </div>
