@@ -117,6 +117,10 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
+  /** true when some non-relevant roles exist (total exp > relevant exp) */
+  nonRelevantExperienceCounted: boolean;
+  /** true when an ambiguity is detected: gaps, mixed relevance, low evidence, etc. */
+  isEdgeCase: boolean;
   notes: string;
 }
 

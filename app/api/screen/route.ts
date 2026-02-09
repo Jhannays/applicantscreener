@@ -477,6 +477,26 @@ export async function POST(req: Request) {
               totalRelevantMonths
             );
 
+            // 8. Compute flags
+            const totalExpMonths =
+              experience.totalYears * 12 + experience.totalMonths;
+            const nonRelevantExperienceCounted =
+              totalExpMonths > totalRelevantMonths;
+
+            // Edge case: gaps present AND (mixed relevance OR low evidence ratio OR very short relevant exp)
+            const hasGaps = gapAnalysis.gapCount > 0;
+            const hasMixedRelevance =
+              experience.roleRelevance.some((r) => r.isRelevant) &&
+              experience.roleRelevance.some((r) => !r.isRelevant);
+            const lowEvidenceRatio =
+              expectations.length > 0 &&
+              metCount / expectations.length < 0.5;
+            const veryShortRelevant = totalRelevantMonths < 6;
+            const isEdgeCase =
+              (hasGaps && hasMixedRelevance) ||
+              (hasGaps && lowEvidenceRatio) ||
+              veryShortRelevant;
+
             const result: ApplicantResult = {
               reqId,
               resumeFile: resume.fileName,
@@ -495,6 +515,8 @@ export async function POST(req: Request) {
               keyRequirementsMetCount: metCount,
               keyRequirementsMissingCount: missingCount,
               overallMatch: match,
+              nonRelevantExperienceCounted,
+              isEdgeCase,
               notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
             };
 

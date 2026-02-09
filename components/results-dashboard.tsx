@@ -82,7 +82,7 @@ function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
 function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
   return (
     <tr>
-      <td colSpan={8} className="border-b border-border bg-muted/10 px-4 py-5">
+      <td colSpan={11} className="border-b border-border bg-muted/10 px-4 py-5">
         <div className="space-y-5">
           {/* Education / Skills / Certs */}
           <div className="grid gap-4 md:grid-cols-3">
@@ -381,39 +381,48 @@ export function ResultsDashboard({
 
   const exportCSV = () => {
     const headers = [
-      "req_id",
-      "resume_file",
-      "candidate_name",
-      "relevant_years",
-      "relevant_months",
-      "total_years",
-      "total_months",
-      "gap_count",
-      "largest_gap_months",
-      "total_gap_months",
-      "key_requirements_met_count",
-      "key_requirements_missing_count",
-      "overall_match",
-      "notes",
+      "Requisition#",
+      "Candidate Name",
+      "Education",
+      "Skills",
+      "Years of Experience",
+      "Certifications",
+      "Gap Present? (Y/N)",
+      "Non-Relevant Experience Counted? (Y/N)",
+      "Edge Case? (Y/N)",
     ];
-    const rows = results.map((r) =>
-      [
-        r.reqId,
-        r.resumeFile,
-        `"${r.candidateName.replace(/"/g, '""')}"`,
-        r.relevantYears,
-        r.relevantMonths,
-        r.totalYears,
-        r.totalMonths,
-        r.gapAnalysis.gapCount,
-        r.gapAnalysis.largestGapMonths,
-        r.gapAnalysis.totalGapMonths,
-        r.keyRequirementsMetCount,
-        r.keyRequirementsMissingCount,
-        r.overallMatch,
-        `"${r.notes.replace(/"/g, '""')}"`,
-      ].join(",")
-    );
+
+    const csvEscape = (value: string) => {
+      if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+
+    const rows = results.map((r) => {
+      const educationStr = r.education
+        .map((e) => `${e.degree} - ${e.institution}`)
+        .join("; ");
+      const skillsStr = r.skills.join("; ");
+      const certsStr = r.certifications.join("; ");
+      const yoeStr = `${r.relevantYears}y ${r.relevantMonths}m relevant / ${r.totalYears}y ${r.totalMonths}m total`;
+      const gapPresent = r.gapAnalysis.gapCount > 0 ? "Y" : "N";
+      const nonRelevant = r.nonRelevantExperienceCounted ? "Y" : "N";
+      const edgeCase = r.isEdgeCase ? "Y" : "N";
+
+      return [
+        csvEscape(r.reqId),
+        csvEscape(r.candidateName),
+        csvEscape(educationStr || "N/A"),
+        csvEscape(skillsStr || "N/A"),
+        csvEscape(yoeStr),
+        csvEscape(certsStr || "N/A"),
+        gapPresent,
+        nonRelevant,
+        edgeCase,
+      ].join(",");
+    });
+
     downloadFile(
       [headers.join(","), ...rows].join("\n"),
       "all_candidates.csv",
@@ -676,6 +685,15 @@ export function ResultsDashboard({
                 <th className="hidden px-3 py-3 text-left md:table-cell">
                   <SortButton label="Req Met" sortKeyName="metCount" />
                 </th>
+                <th className="hidden px-3 py-3 text-left xl:table-cell">
+                  <span className="text-xs font-medium text-muted-foreground">Gap?</span>
+                </th>
+                <th className="hidden px-3 py-3 text-left xl:table-cell">
+                  <span className="text-xs font-medium text-muted-foreground">Non-Rel?</span>
+                </th>
+                <th className="hidden px-3 py-3 text-left xl:table-cell">
+                  <span className="text-xs font-medium text-muted-foreground">Edge?</span>
+                </th>
                 <th className="px-3 py-3 text-left">
                   <SortButton label="Match" sortKeyName="match" />
                 </th>
@@ -739,6 +757,33 @@ export function ResultsDashboard({
                           /
                           {result.keyRequirementsMetCount +
                             result.keyRequirementsMissingCount}
+                        </span>
+                      </td>
+                      <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          result.gapAnalysis.gapCount > 0
+                            ? "bg-amber-500/10 text-amber-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {result.gapAnalysis.gapCount > 0 ? "Y" : "N"}
+                        </span>
+                      </td>
+                      <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          result.nonRelevantExperienceCounted
+                            ? "bg-amber-500/10 text-amber-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {result.nonRelevantExperienceCounted ? "Y" : "N"}
+                        </span>
+                      </td>
+                      <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          result.isEdgeCase
+                            ? "bg-red-500/10 text-red-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {result.isEdgeCase ? "Y" : "N"}
                         </span>
                       </td>
                       <td className="px-3 py-3">
