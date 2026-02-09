@@ -107,12 +107,11 @@ async function extractText(
 
 async function parseResumeWithAI(
   resumeText: string
-): Promise<ParsedResume | null> {
-  try {
-    const { output } = await generateText({
-      model: "openai/gpt-4o-mini",
-      output: Output.object({ schema: parsedResumeSchema }),
-      prompt: `Parse the following resume and extract structured information.
+): Promise<ParsedResume> {
+  const { output } = await generateText({
+    model: "openai/gpt-4o-mini",
+    output: Output.object({ schema: parsedResumeSchema }),
+    prompt: `Parse the following resume and extract structured information.
 
 RULES:
 - Normalize all dates to "Month YYYY" format (e.g. "Oct 2023"). Use "Present" for current roles.
@@ -123,11 +122,11 @@ RULES:
 
 RESUME TEXT:
 ${resumeText}`,
-    });
-    return output as ParsedResume;
-  } catch {
-    return null;
+  });
+  if (!output) {
+    throw new Error("AI returned empty output when parsing resume");
   }
+  return output as ParsedResume;
 }
 
 // ─── AI: Role relevance ───────────────────────────────────
@@ -145,11 +144,10 @@ async function evaluateRoleRelevance(
     )
     .join("\n\n");
 
-  try {
-    const { output } = await generateText({
-      model: "openai/gpt-4o-mini",
-      output: Output.object({ schema: roleRelevanceSchema }),
-      prompt: `You are an expert HR recruiter. For EACH role below, determine if it is RELEVANT to the job requirements.
+  const { output } = await generateText({
+    model: "openai/gpt-4o-mini",
+    output: Output.object({ schema: roleRelevanceSchema }),
+    prompt: `You are an expert HR recruiter. For EACH role below, determine if it is RELEVANT to the job requirements.
 
 A role is relevant ONLY if the work performed directly relates to the skills, domain, or experience the job requires. Be strict:
 - If the job asks for healthcare experience, a daycare role is NOT relevant.
@@ -162,19 +160,11 @@ CANDIDATE ROLES:
 ${rolesDesc}
 
 For each role, return isRelevant (true/false) and a brief reason.`,
-    });
-    return (
-      (output as { evaluations: { employer: string; title: string; isRelevant: boolean; reason: string }[] })
-        ?.evaluations || []
-    );
-  } catch {
-    return workExperience.map((r) => ({
-      employer: r.employer,
-      title: r.title,
-      isRelevant: false,
-      reason: "Evaluation failed",
-    }));
-  }
+  });
+  return (
+    (output as { evaluations: { employer: string; title: string; isRelevant: boolean; reason: string }[] })
+      ?.evaluations || []
+  );
 }
 
 // ─── AI: Expectations check ───────────────────────────────
@@ -183,11 +173,10 @@ async function evaluateExpectations(
   resumeText: string,
   jobRequirements: string
 ): Promise<ExpectationCheck[]> {
-  try {
-    const { output } = await generateText({
-      model: "openai/gpt-4o-mini",
-      output: Output.object({ schema: expectationsSchema }),
-      prompt: `You are an expert HR recruiter. Extract the KEY expectations/requirements from the job description, then for EACH, determine whether this resume provides evidence.
+  const { output } = await generateText({
+    model: "openai/gpt-4o-mini",
+    output: Output.object({ schema: expectationsSchema }),
+    prompt: `You are an expert HR recruiter. Extract the KEY expectations/requirements from the job description, then for EACH, determine whether this resume provides evidence.
 
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -203,11 +192,8 @@ For each expectation:
 Include a short evidence snippet from the resume for anything Met or Partially Met. For "Not Evident", leave evidence as empty string.
 
 Return 5-15 key expectations.`,
-    });
-    return (output as { checks: ExpectationCheck[] })?.checks || [];
-  } catch {
-    return [];
-  }
+  });
+  return (output as { checks: ExpectationCheck[] })?.checks || [];
 }
 
 // ─── Gap Analysis ─────────────────────────────────────────
@@ -461,19 +447,6 @@ export async function POST(req: Request) {
 
             // 2. Parse resume with AI
             const parsed = await parseResumeWithAI(resumeText);
-            if (!parsed) {
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: "error",
-                    fileName: resume.fileName,
-                    reqId,
-                    error: "AI failed to parse resume",
-                  }) + "\n"
-                )
-              );
-              continue;
-            }
 
             // 3. Evaluate role relevance
             const relevanceResults = await evaluateRoleRelevance(
@@ -531,14 +504,21 @@ export async function POST(req: Request) {
               )
             );
           } catch (err) {
+            let errorMessage = "Unknown error";
+            if (err instanceof Error) {
+              // Some SDK errors nest the real message in cause
+              errorMessage = err.message;
+              if (err.cause && err.cause instanceof Error) {
+                errorMessage += `: ${err.cause.message}`;
+              }
+            }
             controller.enqueue(
               encoder.encode(
                 JSON.stringify({
                   type: "error",
                   fileName: resume.fileName,
                   reqId,
-                  error:
-                    err instanceof Error ? err.message : "Unknown error",
+                  error: errorMessage,
                 }) + "\n"
               )
             );
