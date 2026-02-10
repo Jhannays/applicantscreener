@@ -1,3 +1,5 @@
+export const maxDuration = 300; // 5 minutes for large batches
+
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type {

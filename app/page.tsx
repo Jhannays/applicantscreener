@@ -46,8 +46,20 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Screening failed");
+        let errorMessage = `Server responded with status ${response.status}`;
+        try {
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          }
+        } catch {
+          // If we can't parse the error, use the status message
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
@@ -108,8 +120,17 @@ export default function Home() {
                 errors: [...collectedErrors],
               }));
             }
-          } catch {
-            // Skip malformed JSON lines
+          } catch (parseErr) {
+            // If this line isn't JSON, it's likely a raw error from the server
+            const trimmedLine = line.trim();
+            if (trimmedLine.length > 0) {
+              console.error("[v0] Failed to parse NDJSON line:", trimmedLine);
+              collectedErrors.push(trimmedLine);
+              setState((prev) => ({
+                ...prev,
+                errors: [...collectedErrors],
+              }));
+            }
           }
         }
       }
