@@ -455,6 +455,21 @@ export async function POST(req: Request) {
         }) {
           const { reqId, jobContent, fileName, file } = item;
 
+          // Each resume has 3 sub-steps for smoother progress
+          const baseIndex = matchedPairs.indexOf(item);
+          const sendSubProgress = (subStep: number) => {
+            // subStep: 0 = extracting, 1 = parsing, 2 = evaluating
+            send({
+              type: "sub-progress",
+              current: baseIndex,
+              subStep,
+              subStepTotal: 3,
+              total: totalCount,
+              fileName,
+              reqId,
+            });
+          };
+
           send({
             type: "step",
             fileName,
@@ -462,6 +477,7 @@ export async function POST(req: Request) {
             step: "extracting",
             message: `Extracting text from ${fileName}`,
           });
+          sendSubProgress(0);
 
           try {
             // 1. Extract text
@@ -487,9 +503,10 @@ export async function POST(req: Request) {
               step: "parsing",
               message: `AI is parsing resume structure for ${fileName}`,
             });
+            sendSubProgress(1);
             const parsed = await parseResumeWithAI(resumeText);
 
-            // 3. Run role relevance + expectations IN PARALLEL (both depend on parsed, not each other)
+            // 3. Run role relevance + expectations IN PARALLEL
             send({
               type: "step",
               fileName,
@@ -497,6 +514,7 @@ export async function POST(req: Request) {
               step: "evaluating",
               message: `Evaluating relevance & expectations for ${parsed.candidateName || fileName}`,
             });
+            sendSubProgress(2);
 
             const [relevanceResults, expectations] = await Promise.all([
               evaluateRoleRelevance(parsed.workExperience, jobContent),

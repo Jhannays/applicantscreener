@@ -152,7 +152,17 @@ export default function Home() {
                 currentStep: message.step,
                 activityLog: [...activityLog],
               }));
+            } else if (message.type === "sub-progress") {
+              // Fractional progress: each resume is divided into subStepTotal sub-steps
+              const fractionalProgress = message.current + (message.subStep / message.subStepTotal);
+              setState((prev) => ({
+                ...prev,
+                progress: fractionalProgress,
+                totalToProcess: message.total,
+                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
+              }));
             } else if (message.type === "progress") {
+              // Full resume completed
               setState((prev) => ({
                 ...prev,
                 progress: message.current,
