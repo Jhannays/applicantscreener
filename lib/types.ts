@@ -2,29 +2,22 @@
 // Upload / Input Types
 // ──────────────────────────────────────────────
 
-/** A single uploaded file (job req or resume) with raw bytes */
-export interface UploadedFile {
-  name: string;
-  /** base64-encoded content for binary files, or plain text */
-  content: string;
-  size: number;
-  type: "text" | "pdf" | "docx";
-}
-
 /** A job-requirements file keyed by requisition id */
 export interface JobFile {
   reqId: string;
   fileName: string;
-  content: string; // plain text of the job requirements
+  /** The raw File object (for FormData upload) */
+  file: File;
 }
 
 /** A resume grouped under a requisition */
 export interface ResumeFile {
   reqId: string;
   fileName: string;
-  content: string; // base64 for binary, plain text for .txt/.md
-  fileType: "text" | "pdf" | "docx";
+  /** The raw File object (for FormData upload) */
+  file: File;
   size: number;
+  fileType: "text" | "pdf" | "docx";
 }
 
 // ──────────────────────────────────────────────
@@ -117,11 +110,19 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
-  /** true when some non-relevant roles exist (total exp > relevant exp) */
   nonRelevantExperienceCounted: boolean;
-  /** true when an ambiguity is detected: gaps, mixed relevance, low evidence, etc. */
   isEdgeCase: boolean;
   notes: string;
+}
+
+// ──────────────────────────────────────────────
+// Per-Resume Error
+// ──────────────────────────────────────────────
+
+export interface ScreeningError {
+  reqId: string;
+  fileName: string;
+  error: string;
 }
 
 // ──────────────────────────────────────────────
@@ -133,7 +134,8 @@ export interface ScreeningState {
   jobFiles: JobFile[];
   resumeFiles: ResumeFile[];
   results: ApplicantResult[];
-  errors: string[];
+  errors: ScreeningError[];
+  globalErrors: string[];
   progress: number;
   totalToProcess: number;
   currentFile: string;

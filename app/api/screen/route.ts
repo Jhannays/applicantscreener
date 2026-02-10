@@ -3,8 +3,6 @@ export const maxDuration = 300; // 5 minutes for large batches
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type {
-  JobFile,
-  ResumeFile,
   ApplicantResult,
   GapAnalysis,
   GapEntry,
@@ -12,7 +10,6 @@ import type {
   ExpectationCheck,
   ParsedResume,
   WorkExperience,
-  Education,
 } from "@/lib/types";
 import {
   parseMonthYear,
@@ -69,16 +66,17 @@ const expectationsSchema = z.object({
 
 // ─── Text extraction ──────────────────────────────────────
 
-async function extractText(
-  content: string,
-  fileType: "text" | "pdf" | "docx"
+async function extractTextFromBuffer(
+  buffer: Buffer,
+  fileName: string
 ): Promise<string> {
-  if (fileType === "text") return content;
+  const lower = fileName.toLowerCase();
 
-  // Decode base64 to Buffer
-  const buffer = Buffer.from(content, "base64");
+  if (lower.endsWith(".txt") || lower.endsWith(".md")) {
+    return buffer.toString("utf-8");
+  }
 
-  if (fileType === "pdf") {
+  if (lower.endsWith(".pdf")) {
     try {
       const pdfParse = (await import("pdf-parse")).default;
       const data = await pdfParse(buffer);
@@ -90,7 +88,7 @@ async function extractText(
     }
   }
 
-  if (fileType === "docx") {
+  if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
     try {
       const mammoth = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer });
@@ -102,14 +100,12 @@ async function extractText(
     }
   }
 
-  throw new Error(`Unsupported file type: ${fileType}`);
+  throw new Error(`Unsupported file type: ${fileName}`);
 }
 
 // ─── AI: Parse resume ─────────────────────────────────────
 
-async function parseResumeWithAI(
-  resumeText: string
-): Promise<ParsedResume> {
+async function parseResumeWithAI(resumeText: string): Promise<ParsedResume> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
     output: Output.object({ schema: parsedResumeSchema }),
@@ -142,7 +138,7 @@ async function evaluateRoleRelevance(
   const rolesDesc = workExperience
     .map(
       (r, i) =>
-        `Role ${i + 1}: ${r.title} at ${r.employer} (${r.startDate} – ${r.endDate})\nResponsibilities: ${r.bullets.join("; ")}`
+        `Role ${i + 1}: ${r.title} at ${r.employer} (${r.startDate} - ${r.endDate})\nResponsibilities: ${r.bullets.join("; ")}`
     )
     .join("\n\n");
 
@@ -164,8 +160,16 @@ ${rolesDesc}
 For each role, return isRelevant (true/false) and a brief reason.`,
   });
   return (
-    (output as { evaluations: { employer: string; title: string; isRelevant: boolean; reason: string }[] })
-      ?.evaluations || []
+    (
+      output as {
+        evaluations: {
+          employer: string;
+          title: string;
+          isRelevant: boolean;
+          reason: string;
+        }[];
+      }
+    )?.evaluations || []
   );
 }
 
@@ -205,7 +209,6 @@ function computeGapAnalysis(workExperience: WorkExperience[]): GapAnalysis {
     return { gaps: [], gapCount: 0, largestGapMonths: 0, totalGapMonths: 0 };
   }
 
-  // Parse and sort by start date
   const parsed = workExperience
     .map((w) => ({
       start: parseMonthYear(w.startDate),
@@ -230,7 +233,6 @@ function computeGapAnalysis(workExperience: WorkExperience[]): GapAnalysis {
     const currentEnd = parsed[i].end;
     const nextStart = parsed[i + 1].start;
 
-    // Month after current end
     let gapStartMonth = currentEnd.month + 1;
     let gapStartYear = currentEnd.year;
     if (gapStartMonth > 11) {
@@ -238,7 +240,6 @@ function computeGapAnalysis(workExperience: WorkExperience[]): GapAnalysis {
       gapStartYear++;
     }
 
-    // Month before next start
     let gapEndMonth = nextStart.month - 1;
     let gapEndYear = nextStart.year;
     if (gapEndMonth < 0) {
@@ -248,7 +249,6 @@ function computeGapAnalysis(workExperience: WorkExperience[]): GapAnalysis {
 
     const gapStart = { month: gapStartMonth, year: gapStartYear };
     const gapEnd = { month: gapEndMonth, year: gapEndYear };
-
     const gapMonths = monthsBetweenInclusive(gapStart, gapEnd);
 
     if (gapMonths > 0) {
@@ -261,21 +261,22 @@ function computeGapAnalysis(workExperience: WorkExperience[]): GapAnalysis {
   }
 
   const totalGapMonths = gaps.reduce((sum, g) => sum + g.months, 0);
-  const largestGapMonths = gaps.length > 0 ? Math.max(...gaps.map((g) => g.months)) : 0;
+  const largestGapMonths =
+    gaps.length > 0 ? Math.max(...gaps.map((g) => g.months)) : 0;
 
-  return {
-    gaps,
-    gapCount: gaps.length,
-    largestGapMonths,
-    totalGapMonths,
-  };
+  return { gaps, gapCount: gaps.length, largestGapMonths, totalGapMonths };
 }
 
 // ─── Experience calculation ───────────────────────────────
 
 function computeExperience(
   workExperience: WorkExperience[],
-  relevanceResults: { employer: string; title: string; isRelevant: boolean; reason: string }[]
+  relevanceResults: {
+    employer: string;
+    title: string;
+    isRelevant: boolean;
+    reason: string;
+  }[]
 ): {
   roleRelevance: RoleRelevance[];
   totalYears: number;
@@ -328,10 +329,18 @@ function computeExperience(
 function computeOverallMatch(
   expectations: ExpectationCheck[],
   relevantMonthsTotal: number
-): { match: "Strong" | "Medium" | "Weak"; metCount: number; missingCount: number } {
+): {
+  match: "Strong" | "Medium" | "Weak";
+  metCount: number;
+  missingCount: number;
+} {
   const metCount = expectations.filter((e) => e.status === "Met").length;
-  const partialCount = expectations.filter((e) => e.status === "Partially Met").length;
-  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
+  const partialCount = expectations.filter(
+    (e) => e.status === "Partially Met"
+  ).length;
+  const missingCount = expectations.filter(
+    (e) => e.status === "Not Evident"
+  ).length;
   const total = expectations.length || 1;
   const score = (metCount + partialCount * 0.5) / total;
 
@@ -351,54 +360,74 @@ function computeOverallMatch(
 
 export async function POST(req: Request) {
   try {
-    const { jobFiles, resumeFiles } = (await req.json()) as {
-      jobFiles: JobFile[];
-      resumeFiles: ResumeFile[];
+    const formData = await req.formData();
+
+    // Parse the manifest which describes file -> reqId mappings
+    const manifestStr = formData.get("manifest") as string;
+    if (!manifestStr) {
+      return Response.json(
+        { error: "Missing upload manifest." },
+        { status: 400 }
+      );
+    }
+
+    const manifest = JSON.parse(manifestStr) as {
+      jobs: { fieldName: string; reqId: string; fileName: string }[];
+      resumes: {
+        fieldName: string;
+        reqId: string;
+        fileName: string;
+      }[];
     };
 
-    if (!jobFiles?.length || !resumeFiles?.length) {
+    if (!manifest.jobs?.length || !manifest.resumes?.length) {
       return Response.json(
         { error: "Both job requirement files and resume files are required." },
         { status: 400 }
       );
     }
 
-    // Build req ID -> job content map
+    // Read job files into a map
     const jobMap = new Map<string, string>();
-    for (const jf of jobFiles) {
-      jobMap.set(jf.reqId, jf.content);
+    for (const job of manifest.jobs) {
+      const file = formData.get(job.fieldName) as File | null;
+      if (!file) continue;
+      const text = await file.text();
+      jobMap.set(job.reqId, text);
     }
 
-    // Group resumes by req ID
-    const resumesByReq = new Map<string, ResumeFile[]>();
-    for (const rf of resumeFiles) {
-      if (!resumesByReq.has(rf.reqId)) resumesByReq.set(rf.reqId, []);
-      resumesByReq.get(rf.reqId)!.push(rf);
-    }
-
-    const encoder = new TextEncoder();
-    let totalCount = 0;
-    const matchedPairs: { reqId: string; jobContent: string; resume: ResumeFile }[] = [];
+    // Collect matched pairs
+    const matchedPairs: {
+      reqId: string;
+      jobContent: string;
+      fileName: string;
+      file: File;
+    }[] = [];
     const skippedErrors: string[] = [];
 
-    for (const [reqId, resumes] of resumesByReq) {
-      const jobContent = jobMap.get(reqId);
+    for (const resume of manifest.resumes) {
+      const jobContent = jobMap.get(resume.reqId);
       if (!jobContent) {
         skippedErrors.push(
-          `Skipped REQ ${reqId}: no matching job requirements file found`
+          `Skipped REQ ${resume.reqId}: no matching job requirements file found`
         );
         continue;
       }
-      for (const resume of resumes) {
-        matchedPairs.push({ reqId, jobContent, resume });
-      }
+      const file = formData.get(resume.fieldName) as File | null;
+      if (!file) continue;
+      matchedPairs.push({
+        reqId: resume.reqId,
+        jobContent,
+        fileName: resume.fileName,
+        file,
+      });
     }
 
-    totalCount = matchedPairs.length;
+    const totalCount = matchedPairs.length;
+    const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
-        // Send initial info
         controller.enqueue(
           encoder.encode(
             JSON.stringify({
@@ -411,7 +440,7 @@ export async function POST(req: Request) {
 
         let processed = 0;
 
-        for (const { reqId, jobContent, resume } of matchedPairs) {
+        for (const { reqId, jobContent, fileName, file } of matchedPairs) {
           processed++;
 
           controller.enqueue(
@@ -420,7 +449,7 @@ export async function POST(req: Request) {
                 type: "progress",
                 current: processed,
                 total: totalCount,
-                fileName: resume.fileName,
+                fileName,
                 reqId,
               }) + "\n"
             )
@@ -428,17 +457,16 @@ export async function POST(req: Request) {
 
           try {
             // 1. Extract text from file
-            const resumeText = await extractText(
-              resume.content,
-              resume.fileType
-            );
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const resumeText = await extractTextFromBuffer(buffer, fileName);
 
             if (!resumeText || resumeText.trim().length < 20) {
               controller.enqueue(
                 encoder.encode(
                   JSON.stringify({
                     type: "error",
-                    fileName: resume.fileName,
+                    fileName,
                     reqId,
                     error: "Could not extract meaningful text from file",
                   }) + "\n"
@@ -485,14 +513,12 @@ export async function POST(req: Request) {
             const nonRelevantExperienceCounted =
               totalExpMonths > totalRelevantMonths;
 
-            // Edge case: gaps present AND (mixed relevance OR low evidence ratio OR very short relevant exp)
             const hasGaps = gapAnalysis.gapCount > 0;
             const hasMixedRelevance =
               experience.roleRelevance.some((r) => r.isRelevant) &&
               experience.roleRelevance.some((r) => !r.isRelevant);
             const lowEvidenceRatio =
-              expectations.length > 0 &&
-              metCount / expectations.length < 0.5;
+              expectations.length > 0 && metCount / expectations.length < 0.5;
             const veryShortRelevant = totalRelevantMonths < 6;
             const isEdgeCase =
               (hasGaps && hasMixedRelevance) ||
@@ -501,11 +527,11 @@ export async function POST(req: Request) {
 
             const result: ApplicantResult = {
               reqId,
-              resumeFile: resume.fileName,
+              resumeFile: fileName,
               candidateName: parsed.candidateName || "Unknown Candidate",
               education: parsed.education,
-              skills: [...new Set(parsed.skills)], // dedupe
-              certifications: [...new Set(parsed.certifications)], // dedupe
+              skills: [...new Set(parsed.skills)],
+              certifications: [...new Set(parsed.certifications)],
               workExperience: parsed.workExperience,
               gapAnalysis,
               roleRelevance: experience.roleRelevance,
@@ -530,7 +556,6 @@ export async function POST(req: Request) {
           } catch (err) {
             let errorMessage = "Unknown error";
             if (err instanceof Error) {
-              // Some SDK errors nest the real message in cause
               errorMessage = err.message;
               if (err.cause && err.cause instanceof Error) {
                 errorMessage += `: ${err.cause.message}`;
@@ -540,7 +565,7 @@ export async function POST(req: Request) {
               encoder.encode(
                 JSON.stringify({
                   type: "error",
-                  fileName: resume.fileName,
+                  fileName,
                   reqId,
                   error: errorMessage,
                 }) + "\n"

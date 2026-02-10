@@ -18,15 +18,6 @@ function getFileType(name: string): "text" | "pdf" | "docx" | null {
   return null;
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 export function ResumeUploader({
   files,
   jobFiles,
@@ -36,7 +27,6 @@ export function ResumeUploader({
   const [reqIdInput, setReqIdInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Group resumes by req id
   const grouped = files.reduce<Record<string, ResumeFile[]>>((acc, f) => {
     if (!acc[f.reqId]) acc[f.reqId] = [];
     acc[f.reqId].push(f);
@@ -46,32 +36,20 @@ export function ResumeUploader({
   const activeReqId = reqIdInput.trim();
 
   const processFiles = useCallback(
-    async (fileList: FileList, reqId: string) => {
+    (fileList: FileList, reqId: string) => {
       if (!reqId) return;
       const newFiles: ResumeFile[] = [];
       for (let i = 0; i < fileList.length; i++) {
-        const file = fileList[i];
-        const fileType = getFileType(file.name);
+        const f = fileList[i];
+        const fileType = getFileType(f.name);
         if (!fileType) continue;
-
-        let content: string;
-        if (fileType === "text") {
-          content = await file.text();
-        } else {
-          const buffer = await file.arrayBuffer();
-          content = arrayBufferToBase64(buffer);
-        }
-
-        // Avoid exact duplicates within the same req
-        if (
-          !files.some((f) => f.reqId === reqId && f.fileName === file.name)
-        ) {
+        if (!files.some((ex) => ex.reqId === reqId && ex.fileName === f.name)) {
           newFiles.push({
             reqId,
-            fileName: file.name,
-            content,
+            fileName: f.name,
+            file: f,
             fileType,
-            size: file.size,
+            size: f.size,
           });
         }
       }
@@ -123,10 +101,19 @@ export function ResumeUploader({
           Resumes by Requisition
         </h3>
         <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-          Enter a requisition number, then upload resumes for that job.
-          Supports <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">.txt</code>,{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">.pdf</code>, and{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">.docx</code> files.
+          Enter a requisition number, then upload resumes for that job. Supports{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
+            .txt
+          </code>
+          ,{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
+            .pdf
+          </code>
+          , and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
+            .docx
+          </code>{" "}
+          files.
         </p>
       </div>
 
@@ -225,7 +212,8 @@ export function ResumeUploader({
                         REQ {reqId}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        ({resumes.length} file{resumes.length !== 1 ? "s" : ""})
+                        ({resumes.length} file
+                        {resumes.length !== 1 ? "s" : ""})
                       </span>
                       {!hasJob && jobFiles.length > 0 && (
                         <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
@@ -255,7 +243,7 @@ export function ResumeUploader({
                           <span className="shrink-0 text-[10px] text-muted-foreground">
                             {formatSize(r.size)}
                           </span>
-                          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] font-mono text-muted-foreground uppercase">
+                          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] font-mono uppercase text-muted-foreground">
                             {r.fileType}
                           </span>
                         </div>

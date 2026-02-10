@@ -6,7 +6,13 @@ import { JobRequirementsInput } from "@/components/job-requirements-input";
 import { ResumeUploader } from "@/components/resume-uploader";
 import { ScreeningProgress } from "@/components/screening-progress";
 import { ResultsDashboard } from "@/components/results-dashboard";
-import type { JobFile, ResumeFile, ApplicantResult, ScreeningState } from "@/lib/types";
+import type {
+  JobFile,
+  ResumeFile,
+  ApplicantResult,
+  ScreeningState,
+  ScreeningError,
+} from "@/lib/types";
 
 const initialState: ScreeningState = {
   status: "upload",
@@ -14,6 +20,7 @@ const initialState: ScreeningState = {
   resumeFiles: [],
   results: [],
   errors: [],
+  globalErrors: [],
   progress: 0,
   totalToProcess: 0,
   currentFile: "",
@@ -30,19 +37,53 @@ export default function Home() {
       status: "screening",
       results: [],
       errors: [],
+      globalErrors: [],
       progress: 0,
       totalToProcess: 0,
       currentFile: "",
     }));
 
     try {
+      // Build FormData with actual File objects
+      const formData = new FormData();
+
+      const manifest = {
+        jobs: [] as { fieldName: string; reqId: string; fileName: string }[],
+        resumes: [] as {
+          fieldName: string;
+          reqId: string;
+          fileName: string;
+        }[],
+      };
+
+      // Add job files
+      state.jobFiles.forEach((jf, i) => {
+        const fieldName = `job_${i}`;
+        formData.append(fieldName, jf.file, jf.fileName);
+        manifest.jobs.push({
+          fieldName,
+          reqId: jf.reqId,
+          fileName: jf.fileName,
+        });
+      });
+
+      // Add resume files
+      state.resumeFiles.forEach((rf, i) => {
+        const fieldName = `resume_${i}`;
+        formData.append(fieldName, rf.file, rf.fileName);
+        manifest.resumes.push({
+          fieldName,
+          reqId: rf.reqId,
+          fileName: rf.fileName,
+        });
+      });
+
+      // Add manifest as JSON
+      formData.append("manifest", JSON.stringify(manifest));
+
       const response = await fetch("/api/screen", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobFiles: state.jobFiles,
-          resumeFiles: state.resumeFiles,
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -68,7 +109,8 @@ export default function Home() {
       const decoder = new TextDecoder();
       let buffer = "";
       const collectedResults: ApplicantResult[] = [];
-      const collectedErrors: string[] = [];
+      const collectedErrors: ScreeningError[] = [];
+      const collectedGlobalErrors: string[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -85,12 +127,12 @@ export default function Home() {
 
             if (message.type === "info") {
               if (message.skippedErrors) {
-                collectedErrors.push(...message.skippedErrors);
+                collectedGlobalErrors.push(...message.skippedErrors);
               }
               setState((prev) => ({
                 ...prev,
                 totalToProcess: message.totalToProcess,
-                errors: [...collectedErrors],
+                globalErrors: [...collectedGlobalErrors],
               }));
             } else if (message.type === "progress") {
               setState((prev) => ({
@@ -106,8 +148,11 @@ export default function Home() {
                 results: [...collectedResults],
               }));
             } else if (message.type === "error") {
-              const errMsg = `[REQ ${message.reqId}] ${message.fileName}: ${message.error}`;
-              collectedErrors.push(errMsg);
+              collectedErrors.push({
+                reqId: message.reqId,
+                fileName: message.fileName,
+                error: message.error,
+              });
               setState((prev) => ({
                 ...prev,
                 errors: [...collectedErrors],
@@ -118,17 +163,16 @@ export default function Home() {
                 status: "complete",
                 results: [...collectedResults],
                 errors: [...collectedErrors],
+                globalErrors: [...collectedGlobalErrors],
               }));
             }
-          } catch (parseErr) {
-            // If this line isn't JSON, it's likely a raw error from the server
+          } catch {
             const trimmedLine = line.trim();
             if (trimmedLine.length > 0) {
-              console.error("[v0] Failed to parse NDJSON line:", trimmedLine);
-              collectedErrors.push(trimmedLine);
+              collectedGlobalErrors.push(trimmedLine);
               setState((prev) => ({
                 ...prev,
-                errors: [...collectedErrors],
+                globalErrors: [...collectedGlobalErrors],
               }));
             }
           }
@@ -143,6 +187,7 @@ export default function Home() {
             status: "complete",
             results: [...collectedResults],
             errors: [...collectedErrors],
+            globalErrors: [...collectedGlobalErrors],
           };
         }
         return prev;
@@ -151,8 +196,8 @@ export default function Home() {
       setState((prev) => ({
         ...prev,
         status: "error",
-        errors: [
-          ...prev.errors,
+        globalErrors: [
+          ...prev.globalErrors,
           err instanceof Error ? err.message : "An unexpected error occurred",
         ],
       }));
@@ -165,7 +210,6 @@ export default function Home() {
 
   const canScreen = state.jobFiles.length > 0 && state.resumeFiles.length > 0;
 
-  // Count how many resumes have a matching job
   const jobReqIds = new Set(state.jobFiles.map((j) => j.reqId));
   const matchedResumeCount = state.resumeFiles.filter((r) =>
     jobReqIds.has(r.reqId)
@@ -191,10 +235,12 @@ export default function Home() {
           </div>
           {state.status === "complete" && (
             <span className="text-sm text-muted-foreground">
-              {state.results.length} resume
-              {state.results.length !== 1 ? "s" : ""} screened across{" "}
-              {new Set(state.results.map((r) => r.reqId)).size} requisition
-              {new Set(state.results.map((r) => r.reqId)).size !== 1 ? "s" : ""}
+              {state.results.length} screened
+              {state.errors.length > 0 && (
+                <span className="ml-1 text-amber-600">
+                  / {state.errors.length} failed
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -209,20 +255,21 @@ export default function Home() {
                 Batch Resume Screening
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground leading-relaxed">
-                Upload job requirement files and resumes organized by requisition number.
-                The system will match resumes to jobs, extract candidate data, calculate relevant
-                experience, perform gap analysis, and evaluate each resume against job expectations.
+                Upload job requirement files and resumes organized by
+                requisition number. The system will match resumes to jobs,
+                extract candidate data, calculate relevant experience, perform
+                gap analysis, and evaluate each resume against job expectations.
               </p>
             </div>
 
-            {state.status === "error" && state.errors.length > 0 && (
+            {state.status === "error" && state.globalErrors.length > 0 && (
               <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
                 <div>
                   <p className="text-sm font-medium text-destructive">
                     Screening encountered errors
                   </p>
-                  {state.errors.map((e, i) => (
+                  {state.globalErrors.map((e, i) => (
                     <p key={i} className="mt-0.5 text-sm text-destructive/80">
                       {e}
                     </p>
@@ -255,7 +302,8 @@ export default function Home() {
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  {state.jobFiles.length > 0 && state.resumeFiles.length > 0 ? (
+                  {state.jobFiles.length > 0 &&
+                  state.resumeFiles.length > 0 ? (
                     <span>
                       <strong className="text-foreground">
                         {matchedResumeCount}
@@ -289,7 +337,8 @@ export default function Home() {
                   aria-label="Start screening resumes"
                 >
                   <Play className="h-4 w-4" />
-                  Screen {matchedResumeCount > 0 ? matchedResumeCount : ""} Resume
+                  Screen{" "}
+                  {matchedResumeCount > 0 ? matchedResumeCount : ""} Resume
                   {matchedResumeCount !== 1 ? "s" : ""}
                 </button>
               </div>
@@ -304,7 +353,9 @@ export default function Home() {
               progress={state.progress}
               currentResume={state.currentFile}
               total={state.totalToProcess}
-              errors={state.errors}
+              errors={state.errors.map(
+                (e) => `[REQ ${e.reqId}] ${e.fileName}: ${e.error}`
+              )}
             />
           </div>
         )}
@@ -317,13 +368,14 @@ export default function Home() {
                 Screening Results
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Click any row to expand detailed analysis including role relevance,
-                gap analysis, and expectations evaluation.
+                Click any row to expand detailed analysis including role
+                relevance, gap analysis, and expectations evaluation.
               </p>
             </div>
             <ResultsDashboard
               results={state.results}
               errors={state.errors}
+              globalErrors={state.globalErrors}
               onReset={handleReset}
             />
           </div>

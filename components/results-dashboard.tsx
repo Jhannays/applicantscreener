@@ -17,12 +17,19 @@ import {
   GraduationCap,
   Award,
   Wrench,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import type { ApplicantResult, ExpectationCheck } from "@/lib/types";
+import type {
+  ApplicantResult,
+  ExpectationCheck,
+  ScreeningError,
+} from "@/lib/types";
 
 interface ResultsDashboardProps {
   results: ApplicantResult[];
-  errors: string[];
+  errors: ScreeningError[];
+  globalErrors: string[];
   onReset: () => void;
 }
 
@@ -37,6 +44,8 @@ const statusStyles: Record<string, string> = {
   "Partially Met": "bg-amber-500/10 text-amber-700",
   "Not Evident": "bg-red-500/10 text-red-700",
 };
+
+const PAGE_SIZE = 15;
 
 function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
   return (
@@ -82,12 +91,15 @@ function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
 function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
   return (
     <tr>
-      <td colSpan={11} className="border-b border-border bg-muted/10 px-4 py-5">
+      <td
+        colSpan={11}
+        className="border-b border-border bg-muted/10 px-4 py-5"
+      >
         <div className="space-y-5">
           {/* Education / Skills / Certs */}
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <GraduationCap className="h-3.5 w-3.5" />
                 Education
               </h4>
@@ -107,7 +119,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
               )}
             </div>
             <div>
-              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Wrench className="h-3.5 w-3.5" />
                 Skills
               </h4>
@@ -127,7 +139,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
               )}
             </div>
             <div>
-              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Award className="h-3.5 w-3.5" />
                 Certifications
               </h4>
@@ -147,7 +159,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
 
           {/* Role Relevance */}
           <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Briefcase className="h-3.5 w-3.5" />
               Role-by-Role Relevance
             </h4>
@@ -177,7 +189,10 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
                 </thead>
                 <tbody>
                   {result.roleRelevance.map((r, i) => (
-                    <tr key={i} className="border-b border-border last:border-0">
+                    <tr
+                      key={i}
+                      className="border-b border-border last:border-0"
+                    >
                       <td className="px-3 py-2 text-sm text-foreground">
                         {r.employer}
                       </td>
@@ -216,7 +231,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
 
           {/* Gap Analysis */}
           <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Clock className="h-3.5 w-3.5" />
               Gap Analysis
             </h4>
@@ -228,7 +243,10 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                   <span>
-                    Gaps: <strong className="text-foreground">{result.gapAnalysis.gapCount}</strong>
+                    Gaps:{" "}
+                    <strong className="text-foreground">
+                      {result.gapAnalysis.gapCount}
+                    </strong>
                   </span>
                   <span>
                     Largest:{" "}
@@ -265,7 +283,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
 
           {/* Expectations */}
           <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <CheckCircle className="h-3.5 w-3.5" />
               Job Expects vs Resume Shows
             </h4>
@@ -296,6 +314,7 @@ type SortDir = "asc" | "desc";
 export function ResultsDashboard({
   results,
   errors,
+  globalErrors,
   onReset,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -303,6 +322,8 @@ export function ResultsDashboard({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterMatch, setFilterMatch] = useState<string>("All");
   const [filterReqId, setFilterReqId] = useState<string>("All");
+  const [page, setPage] = useState(0);
+  const [showErrorsExpanded, setShowErrorsExpanded] = useState(false);
 
   const reqIds = useMemo(
     () => ["All", ...new Set(results.map((r) => r.reqId))],
@@ -316,11 +337,13 @@ export function ResultsDashboard({
       setSortKey(key);
       setSortDir("desc");
     }
+    setPage(0);
   };
 
   const filtered = useMemo(() => {
     let f = results;
-    if (filterMatch !== "All") f = f.filter((r) => r.overallMatch === filterMatch);
+    if (filterMatch !== "All")
+      f = f.filter((r) => r.overallMatch === filterMatch);
     if (filterReqId !== "All") f = f.filter((r) => r.reqId === filterReqId);
     return f;
   }, [results, filterMatch, filterReqId]);
@@ -349,7 +372,10 @@ export function ResultsDashboard({
           );
         case "match": {
           const order = { Strong: 3, Medium: 2, Weak: 1 };
-          return dir * ((order[a.overallMatch] || 0) - (order[b.overallMatch] || 0));
+          return (
+            dir *
+            ((order[a.overallMatch] || 0) - (order[b.overallMatch] || 0))
+          );
         }
         case "gapCount":
           return dir * (a.gapAnalysis.gapCount - b.gapAnalysis.gapCount);
@@ -363,8 +389,15 @@ export function ResultsDashboard({
     });
   }, [filtered, sortKey, sortDir]);
 
-  const strongCount = results.filter((r) => r.overallMatch === "Strong").length;
-  const mediumCount = results.filter((r) => r.overallMatch === "Medium").length;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const strongCount = results.filter(
+    (r) => r.overallMatch === "Strong"
+  ).length;
+  const mediumCount = results.filter(
+    (r) => r.overallMatch === "Medium"
+  ).length;
   const weakCount = results.filter((r) => r.overallMatch === "Weak").length;
 
   // ─── Export functions ───────────────────────────────────
@@ -379,6 +412,13 @@ export function ResultsDashboard({
     URL.revokeObjectURL(url);
   };
 
+  const csvEscape = (value: string) => {
+    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
   const exportCSV = () => {
     const headers = [
       "Requisition#",
@@ -391,13 +431,6 @@ export function ResultsDashboard({
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
     ];
-
-    const csvEscape = (value: string) => {
-      if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-        return `"${value.replace(/"/g, '""')}"`;
-      }
-      return value;
-    };
 
     const rows = results.map((r) => {
       const educationStr = r.education
@@ -423,6 +456,27 @@ export function ResultsDashboard({
       ].join(",");
     });
 
+    // Also add errored resumes at the bottom
+    if (errors.length > 0) {
+      rows.push(""); // blank line
+      rows.push("# FAILED RESUMES");
+      errors.forEach((e) => {
+        rows.push(
+          [
+            csvEscape(e.reqId),
+            csvEscape(e.fileName),
+            csvEscape(`ERROR: ${e.error}`),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+          ].join(",")
+        );
+      });
+    }
+
     downloadFile(
       [headers.join(","), ...rows].join("\n"),
       "all_candidates.csv",
@@ -432,7 +486,7 @@ export function ResultsDashboard({
 
   const exportJSON = () => {
     downloadFile(
-      JSON.stringify(results, null, 2),
+      JSON.stringify({ results, errors }, null, 2),
       "all_candidates.json",
       "application/json"
     );
@@ -442,7 +496,6 @@ export function ResultsDashboard({
     let md = "# Applicant Screening Results\n\n";
     md += `Generated: ${new Date().toISOString()}\n\n`;
 
-    // Summary table
     md += "## Summary\n\n";
     md += "| REQ ID | Resume | Candidate | Relevant Exp | Total Exp | Gaps | Req Met | Match |\n";
     md += "|--------|--------|-----------|-------------|-----------|------|---------|-------|\n";
@@ -450,9 +503,17 @@ export function ResultsDashboard({
       md += `| ${r.reqId} | ${r.resumeFile} | ${r.candidateName} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
     });
 
+    if (errors.length > 0) {
+      md += "\n## Failed Resumes\n\n";
+      md += "| REQ ID | File | Error |\n";
+      md += "|--------|------|-------|\n";
+      errors.forEach((e) => {
+        md += `| ${e.reqId} | ${e.fileName} | ${e.error} |\n`;
+      });
+    }
+
     md += "\n---\n\n";
 
-    // Per-resume details
     results.forEach((r) => {
       md += `## ${r.candidateName} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${r.resumeFile}\n\n`;
@@ -534,25 +595,91 @@ export function ResultsDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Errors log */}
-      {errors.length > 0 && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-amber-700">
-            <AlertTriangle className="h-4 w-4" />
-            Warnings
-          </h3>
-          <ul className="space-y-1">
-            {errors.map((e, i) => (
-              <li key={i} className="text-xs text-amber-700">
-                {e}
-              </li>
-            ))}
-          </ul>
+      {/* Failed Resumes Section */}
+      {(errors.length > 0 || globalErrors.length > 0) && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5">
+          <button
+            onClick={() => setShowErrorsExpanded(!showErrorsExpanded)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-destructive" />
+              <span className="text-sm font-semibold text-destructive">
+                {errors.length} Resume{errors.length !== 1 ? "s" : ""} Failed
+              </span>
+              {globalErrors.length > 0 && (
+                <span className="text-xs text-destructive/70">
+                  + {globalErrors.length} warning
+                  {globalErrors.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            {showErrorsExpanded ? (
+              <ChevronUp className="h-4 w-4 text-destructive/70" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-destructive/70" />
+            )}
+          </button>
+
+          {showErrorsExpanded && (
+            <div className="border-t border-destructive/20 px-4 py-3">
+              {globalErrors.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-destructive/60">
+                    Warnings
+                  </p>
+                  {globalErrors.map((e, i) => (
+                    <p key={i} className="text-xs text-destructive/80">
+                      {e}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {errors.length > 0 && (
+                <div className="overflow-x-auto rounded-md border border-destructive/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-destructive/20 bg-destructive/5">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                          REQ
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                          File
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                          Error
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errors.map((e, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-destructive/10 last:border-0"
+                        >
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-destructive/80">
+                            {e.reqId}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-destructive/80">
+                            {e.fileName}
+                          </td>
+                          <td className="max-w-md px-3 py-2 text-xs text-destructive/70">
+                            {e.error}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Users className="h-5 w-5" />
@@ -591,16 +718,31 @@ export function ResultsDashboard({
             <p className="text-xs text-muted-foreground">Weak</p>
           </div>
         </div>
+        {errors.length > 0 && (
+          <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-destructive">
+                {errors.length}
+              </p>
+              <p className="text-xs text-destructive/70">Failed</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
-          {/* Match filter */}
           {["All", "Strong", "Medium", "Weak"].map((v) => (
             <button
               key={v}
-              onClick={() => setFilterMatch(v)}
+              onClick={() => {
+                setFilterMatch(v);
+                setPage(0);
+              }}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 filterMatch === v
                   ? "bg-primary text-primary-foreground"
@@ -611,11 +753,13 @@ export function ResultsDashboard({
             </button>
           ))}
 
-          {/* Req ID filter */}
           {reqIds.length > 2 && (
             <select
               value={filterReqId}
-              onChange={(e) => setFilterReqId(e.target.value)}
+              onChange={(e) => {
+                setFilterReqId(e.target.value);
+                setPage(0);
+              }}
               className="rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               aria-label="Filter by requisition"
             >
@@ -686,13 +830,19 @@ export function ResultsDashboard({
                   <SortButton label="Req Met" sortKeyName="metCount" />
                 </th>
                 <th className="hidden px-3 py-3 text-left xl:table-cell">
-                  <span className="text-xs font-medium text-muted-foreground">Gap?</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Gap?
+                  </span>
                 </th>
                 <th className="hidden px-3 py-3 text-left xl:table-cell">
-                  <span className="text-xs font-medium text-muted-foreground">Non-Rel?</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Non-Rel?
+                  </span>
                 </th>
                 <th className="hidden px-3 py-3 text-left xl:table-cell">
-                  <span className="text-xs font-medium text-muted-foreground">Edge?</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Edge?
+                  </span>
                 </th>
                 <th className="px-3 py-3 text-left">
                   <SortButton label="Match" sortKeyName="match" />
@@ -700,7 +850,7 @@ export function ResultsDashboard({
               </tr>
             </thead>
             <tbody>
-              {sorted.map((result) => {
+              {paged.map((result) => {
                 const rowId = `${result.reqId}-${result.resumeFile}`;
                 const isExpanded = expandedId === rowId;
                 return (
@@ -746,7 +896,9 @@ export function ResultsDashboard({
                             {result.gapAnalysis.gapCount}
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">0</span>
+                          <span className="text-xs text-muted-foreground">
+                            0
+                          </span>
                         )}
                       </td>
                       <td className="hidden whitespace-nowrap px-3 py-3 text-xs md:table-cell">
@@ -760,29 +912,35 @@ export function ResultsDashboard({
                         </span>
                       </td>
                       <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          result.gapAnalysis.gapCount > 0
-                            ? "bg-amber-500/10 text-amber-700"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            result.gapAnalysis.gapCount > 0
+                              ? "bg-amber-500/10 text-amber-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
                           {result.gapAnalysis.gapCount > 0 ? "Y" : "N"}
                         </span>
                       </td>
                       <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          result.nonRelevantExperienceCounted
-                            ? "bg-amber-500/10 text-amber-700"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            result.nonRelevantExperienceCounted
+                              ? "bg-amber-500/10 text-amber-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
                           {result.nonRelevantExperienceCounted ? "Y" : "N"}
                         </span>
                       </td>
                       <td className="hidden whitespace-nowrap px-3 py-3 xl:table-cell">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          result.isEdgeCase
-                            ? "bg-red-500/10 text-red-700"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            result.isEdgeCase
+                              ? "bg-red-500/10 text-red-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
                           {result.isEdgeCase ? "Y" : "N"}
                         </span>
                       </td>
@@ -808,6 +966,40 @@ export function ResultsDashboard({
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <FileText className="mb-2 h-8 w-8" />
             <p className="text-sm">No results match the current filters.</p>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              Showing {page * PAGE_SIZE + 1} -{" "}
+              {Math.min((page + 1) * PAGE_SIZE, sorted.length)} of{" "}
+              {sorted.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(Math.max(0, page - 1))}
+                disabled={page === 0}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent disabled:opacity-30"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-2 text-xs text-muted-foreground">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() =>
+                  setPage(Math.min(totalPages - 1, page + 1))
+                }
+                disabled={page >= totalPages - 1}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent disabled:opacity-30"
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

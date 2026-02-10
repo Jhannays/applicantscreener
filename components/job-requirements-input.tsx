@@ -10,7 +10,6 @@ interface JobRequirementsInputProps {
 }
 
 function extractReqId(fileName: string): string | null {
-  // Requisition number is the first thing in the filename
   const match = fileName.match(/^(\d+)/);
   return match ? match[1] : null;
 }
@@ -30,10 +29,8 @@ export function JobRequirementsInput({
         if (!file.name.endsWith(".txt") && !file.name.endsWith(".md")) continue;
         const reqId = extractReqId(file.name);
         if (!reqId) continue;
-        const content = await file.text();
-        // Avoid duplicates
         if (!files.some((f) => f.reqId === reqId)) {
-          newFiles.push({ reqId, fileName: file.name, content });
+          newFiles.push({ reqId, fileName: file.name, file });
         }
       }
       if (newFiles.length > 0) {
@@ -66,8 +63,15 @@ export function JobRequirementsInput({
           Job Requirements
         </h3>
         <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-          Upload .txt files from your <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">./jobs/</code> folder.
-          Each filename must start with the requisition number (e.g. <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">25004678_job_requirements.txt</code>).
+          Upload .txt files from your{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
+            ./jobs/
+          </code>{" "}
+          folder. Each filename must start with the requisition number (e.g.{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
+            25004678_job_requirements.txt
+          </code>
+          ).
         </p>
       </div>
 
@@ -124,7 +128,7 @@ export function JobRequirementsInput({
               >
                 <div className="flex items-center gap-2 overflow-hidden">
                   <FileText className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="truncate text-sm text-foreground font-mono">
+                  <span className="truncate text-sm font-mono text-foreground">
                     {f.reqId}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
