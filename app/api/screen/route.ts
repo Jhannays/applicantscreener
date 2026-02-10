@@ -439,67 +439,80 @@ export async function POST(req: Request) {
         );
 
         let processed = 0;
+        const BATCH_SIZE = 3; // Process 3 resumes concurrently
 
-        for (const { reqId, jobContent, fileName, file } of matchedPairs) {
-          processed++;
+        // Helper to send a message
+        const send = (msg: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(JSON.stringify(msg) + "\n"));
+        };
 
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({
-                type: "progress",
-                current: processed,
-                total: totalCount,
-                fileName,
-                reqId,
-              }) + "\n"
-            )
-          );
+        // Process a single resume
+        async function processOne(item: {
+          reqId: string;
+          jobContent: string;
+          fileName: string;
+          file: File;
+        }) {
+          const { reqId, jobContent, fileName, file } = item;
+
+          send({
+            type: "step",
+            fileName,
+            reqId,
+            step: "extracting",
+            message: `Extracting text from ${fileName}`,
+          });
 
           try {
-            // 1. Extract text from file
+            // 1. Extract text
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             const resumeText = await extractTextFromBuffer(buffer, fileName);
 
             if (!resumeText || resumeText.trim().length < 20) {
-              controller.enqueue(
-                encoder.encode(
-                  JSON.stringify({
-                    type: "error",
-                    fileName,
-                    reqId,
-                    error: "Could not extract meaningful text from file",
-                  }) + "\n"
-                )
-              );
-              continue;
+              send({
+                type: "error",
+                fileName,
+                reqId,
+                error: "Could not extract meaningful text from file",
+              });
+              return;
             }
 
             // 2. Parse resume with AI
+            send({
+              type: "step",
+              fileName,
+              reqId,
+              step: "parsing",
+              message: `AI is parsing resume structure for ${fileName}`,
+            });
             const parsed = await parseResumeWithAI(resumeText);
 
-            // 3. Evaluate role relevance
-            const relevanceResults = await evaluateRoleRelevance(
-              parsed.workExperience,
-              jobContent
-            );
+            // 3. Run role relevance + expectations IN PARALLEL (both depend on parsed, not each other)
+            send({
+              type: "step",
+              fileName,
+              reqId,
+              step: "evaluating",
+              message: `Evaluating relevance & expectations for ${parsed.candidateName || fileName}`,
+            });
 
-            // 4. Compute experience
+            const [relevanceResults, expectations] = await Promise.all([
+              evaluateRoleRelevance(parsed.workExperience, jobContent),
+              evaluateExpectations(resumeText, jobContent),
+            ]);
+
+            // 4. Compute experience (deterministic, instant)
             const experience = computeExperience(
               parsed.workExperience,
               relevanceResults
             );
 
-            // 5. Gap analysis
+            // 5. Gap analysis (deterministic, instant)
             const gapAnalysis = computeGapAnalysis(parsed.workExperience);
 
-            // 6. Job expects vs resume shows
-            const expectations = await evaluateExpectations(
-              resumeText,
-              jobContent
-            );
-
-            // 7. Overall match
+            // 6. Overall match
             const totalRelevantMonths =
               experience.relevantYears * 12 + experience.relevantMonths;
             const { match, metCount, missingCount } = computeOverallMatch(
@@ -507,7 +520,7 @@ export async function POST(req: Request) {
               totalRelevantMonths
             );
 
-            // 8. Compute flags
+            // 7. Compute flags
             const totalExpMonths =
               experience.totalYears * 12 + experience.totalMonths;
             const nonRelevantExperienceCounted =
@@ -548,11 +561,7 @@ export async function POST(req: Request) {
               notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
             };
 
-            controller.enqueue(
-              encoder.encode(
-                JSON.stringify({ type: "result", data: result }) + "\n"
-              )
-            );
+            send({ type: "result", data: result });
           } catch (err) {
             let errorMessage = "Unknown error";
             if (err instanceof Error) {
@@ -561,17 +570,23 @@ export async function POST(req: Request) {
                 errorMessage += `: ${err.cause.message}`;
               }
             }
-            controller.enqueue(
-              encoder.encode(
-                JSON.stringify({
-                  type: "error",
-                  fileName,
-                  reqId,
-                  error: errorMessage,
-                }) + "\n"
-              )
-            );
+            send({ type: "error", fileName, reqId, error: errorMessage });
+          } finally {
+            processed++;
+            send({
+              type: "progress",
+              current: processed,
+              total: totalCount,
+              fileName,
+              reqId,
+            });
           }
+        }
+
+        // Process in batches of BATCH_SIZE
+        for (let i = 0; i < matchedPairs.length; i += BATCH_SIZE) {
+          const batch = matchedPairs.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(processOne));
         }
 
         controller.enqueue(

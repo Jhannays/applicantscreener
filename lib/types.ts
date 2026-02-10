@@ -129,6 +129,12 @@ export interface ScreeningError {
 // App State
 // ──────────────────────────────────────────────
 
+export interface ActivityLogEntry {
+  time: string;
+  message: string;
+  type: "info" | "success" | "error" | "step";
+}
+
 export interface ScreeningState {
   status: "upload" | "screening" | "complete" | "error";
   jobFiles: JobFile[];
@@ -139,4 +145,6 @@ export interface ScreeningState {
   progress: number;
   totalToProcess: number;
   currentFile: string;
+  currentStep: string;
+  activityLog: ActivityLogEntry[];
 }

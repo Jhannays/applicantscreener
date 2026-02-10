@@ -12,6 +12,7 @@ import type {
   ApplicantResult,
   ScreeningState,
   ScreeningError,
+  ActivityLogEntry,
 } from "@/lib/types";
 
 const initialState: ScreeningState = {
@@ -24,6 +25,8 @@ const initialState: ScreeningState = {
   progress: 0,
   totalToProcess: 0,
   currentFile: "",
+  currentStep: "",
+  activityLog: [],
 };
 
 export default function Home() {
@@ -41,6 +44,8 @@ export default function Home() {
       progress: 0,
       totalToProcess: 0,
       currentFile: "",
+      currentStep: "",
+      activityLog: [],
     }));
 
     try {
@@ -111,6 +116,7 @@ export default function Home() {
       const collectedResults: ApplicantResult[] = [];
       const collectedErrors: ScreeningError[] = [];
       const collectedGlobalErrors: string[] = [];
+      const activityLog: { time: string; message: string; type: "info" | "success" | "error" | "step" }[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -125,14 +131,26 @@ export default function Home() {
           try {
             const message = JSON.parse(line);
 
+            const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
             if (message.type === "info") {
               if (message.skippedErrors) {
                 collectedGlobalErrors.push(...message.skippedErrors);
               }
+              activityLog.push({ time: now, message: `Starting batch: ${message.totalToProcess} resume(s) to process`, type: "info" });
               setState((prev) => ({
                 ...prev,
                 totalToProcess: message.totalToProcess,
                 globalErrors: [...collectedGlobalErrors],
+                activityLog: [...activityLog],
+              }));
+            } else if (message.type === "step") {
+              activityLog.push({ time: now, message: message.message, type: "step" });
+              setState((prev) => ({
+                ...prev,
+                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
+                currentStep: message.step,
+                activityLog: [...activityLog],
               }));
             } else if (message.type === "progress") {
               setState((prev) => ({
@@ -143,9 +161,11 @@ export default function Home() {
               }));
             } else if (message.type === "result") {
               collectedResults.push(message.data);
+              activityLog.push({ time: now, message: `Completed: ${message.data.candidateName}`, type: "success" });
               setState((prev) => ({
                 ...prev,
                 results: [...collectedResults],
+                activityLog: [...activityLog],
               }));
             } else if (message.type === "error") {
               collectedErrors.push({
@@ -153,17 +173,21 @@ export default function Home() {
                 fileName: message.fileName,
                 error: message.error,
               });
+              activityLog.push({ time: now, message: `Failed: ${message.fileName} - ${message.error}`, type: "error" });
               setState((prev) => ({
                 ...prev,
                 errors: [...collectedErrors],
+                activityLog: [...activityLog],
               }));
             } else if (message.type === "done") {
+              activityLog.push({ time: now, message: `Done! ${collectedResults.length} screened, ${collectedErrors.length} failed`, type: "info" });
               setState((prev) => ({
                 ...prev,
                 status: "complete",
                 results: [...collectedResults],
                 errors: [...collectedErrors],
                 globalErrors: [...collectedGlobalErrors],
+                activityLog: [...activityLog],
               }));
             }
           } catch {
@@ -352,10 +376,11 @@ export default function Home() {
             <ScreeningProgress
               progress={state.progress}
               currentResume={state.currentFile}
+              currentStep={state.currentStep}
               total={state.totalToProcess}
-              errors={state.errors.map(
-                (e) => `[REQ ${e.reqId}] ${e.fileName}: ${e.error}`
-              )}
+              completedCount={state.results.length}
+              errorCount={state.errors.length}
+              activityLog={state.activityLog}
             />
           </div>
         )}
