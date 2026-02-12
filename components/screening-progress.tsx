@@ -11,7 +11,6 @@ interface ScreeningProgressProps {
   total: number;
   completedCount: number;
   errorCount: number;
-  duplicateCount: number;
   activityLog: ActivityLogEntry[];
 }
 
@@ -20,7 +19,6 @@ export function ScreeningProgress({
   total,
   completedCount,
   errorCount,
-  duplicateCount,
   activityLog,
 }: ScreeningProgressProps) {
   const completed = Math.floor(progress);
@@ -76,11 +74,6 @@ export function ScreeningProgress({
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
           <span className="tabular-nums font-medium">{percentage}%</span>
           <span className="flex items-center gap-3">
-            {duplicateCount > 0 && (
-              <span className="flex items-center gap-1 text-blue-600">
-                {duplicateCount} from history
-              </span>
-            )}
             {completedCount > 0 && (
               <span className="flex items-center gap-1 text-emerald-600">
                 <CheckCircle2 className="h-3.5 w-3.5" />

@@ -152,6 +152,5 @@ export interface ScreeningState {
   totalToProcess: number;
   currentFile: string;
   currentStep: string;
-  duplicateCount: number;
   activityLog: ActivityLogEntry[];
 }

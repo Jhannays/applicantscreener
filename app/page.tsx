@@ -26,7 +26,6 @@ const initialState: ScreeningState = {
   totalToProcess: 0,
   currentFile: "",
   currentStep: "",
-  duplicateCount: 0,
   activityLog: [],
 };
 
@@ -46,7 +45,6 @@ export default function Home() {
       totalToProcess: 0,
       currentFile: "",
       currentStep: "",
-      duplicateCount: 0,
       activityLog: [],
     }));
 
@@ -135,30 +133,14 @@ export default function Home() {
 
             const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-            if (message.type === "duplicate") {
-              // Previously screened resume -- include its stored result
-              collectedResults.push(message.previousResult);
-              activityLog.push({
-                time: now,
-                message: `Skipped duplicate: ${message.candidateName || message.fileName} (already screened)`,
-                type: "info",
-              });
-              setState((prev) => ({
-                ...prev,
-                results: [...collectedResults],
-                activityLog: [...activityLog],
-              }));
-            } else if (message.type === "info") {
+            if (message.type === "info") {
               if (message.skippedErrors) {
                 collectedGlobalErrors.push(...message.skippedErrors);
               }
-              const dupCount = message.duplicateCount || 0;
-              const dupMsg = dupCount > 0 ? ` (${dupCount} duplicate(s) skipped)` : "";
-              activityLog.push({ time: now, message: `Starting batch: ${message.totalToProcess} resume(s) to process${dupMsg}`, type: "info" });
+              activityLog.push({ time: now, message: `Starting batch: ${message.totalToProcess} resume(s) to process`, type: "info" });
               setState((prev) => ({
                 ...prev,
                 totalToProcess: message.totalToProcess,
-                duplicateCount: dupCount,
                 globalErrors: [...collectedGlobalErrors],
                 activityLog: [...activityLog],
               }));
@@ -288,11 +270,6 @@ export default function Home() {
           {state.status === "complete" && (
             <span className="text-sm text-muted-foreground">
               {state.results.length} screened
-              {state.duplicateCount > 0 && (
-                <span className="ml-1 text-blue-600">
-                  ({state.duplicateCount} from history)
-                </span>
-              )}
               {state.errors.length > 0 && (
                 <span className="ml-1 text-amber-600">
                   / {state.errors.length} failed
@@ -413,7 +390,6 @@ export default function Home() {
               total={state.totalToProcess}
               completedCount={state.results.length}
               errorCount={state.errors.length}
-              duplicateCount={state.duplicateCount}
               activityLog={state.activityLog}
             />
           </div>
