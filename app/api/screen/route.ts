@@ -60,6 +60,7 @@ const expectationsSchema = z.object({
   checks: z.array(
     z.object({
       expectation: z.string(),
+      category: z.enum(["minimum", "preferred"]),
       status: z.enum(["Met", "Partially Met", "Not Evident"]),
       evidence: z.string(),
     })
@@ -147,15 +148,18 @@ async function evaluateRoleRelevance(
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
     output: Output.object({ schema: roleRelevanceSchema }),
-    prompt: `You are an expert HR recruiter performing a transparent, auditable relevance evaluation. For EACH role below, determine if it is RELEVANT to the job requirements.
+    prompt: `You are an expert HR recruiter performing a transparent, auditable relevance evaluation. For EACH role below, determine if it is RELEVANT to what the job posting EXPLICITLY requires.
 
-A role is relevant ONLY if the work performed directly relates to the skills, domain, or experience the job requires.
+CRITICAL: Only compare against requirements that are EXPLICITLY STATED in the job posting. Do NOT infer or assume requirements that are not written.
+
+A role is relevant ONLY if the work performed directly relates to skills, domain, or experience EXPLICITLY listed in the job posting.
 
 STRICT RULES:
-- If the job asks for healthcare/nursing experience, a daycare or food-service role is NOT relevant.
-- If the job asks for software engineering, a retail role is NOT relevant.
-- Generic administrative or supervisory experience is NOT relevant unless the job explicitly asks for it.
-- "Relevant" means the daily duties align with what the job posting describes.
+- If the job posting asks for healthcare/nursing experience, a daycare or food-service role is NOT relevant.
+- If the job posting asks for software engineering, a retail role is NOT relevant.
+- Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
+- "Relevant" means the daily duties align with what the job posting explicitly describes.
+- Do NOT reward or penalize based on inferred requirements -- only what the posting states.
 
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -195,26 +199,34 @@ async function evaluateExpectations(
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
     output: Output.object({ schema: expectationsSchema }),
-    prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation. Extract the KEY expectations/requirements from the job description, then for EACH, determine whether this resume provides evidence.
+    prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
-JOB REQUIREMENTS:
+CRITICAL RULES:
+1. ONLY evaluate against requirements that are EXPLICITLY STATED in the job posting below. Do NOT infer, assume, or add requirements that are not written in the posting.
+2. Classify each requirement as either "minimum" or "preferred":
+   - "minimum" = the posting says "required", "must have", "minimum", "mandatory", or lists it as a basic qualification
+   - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications
+   - If the posting does not clearly distinguish, treat it as "minimum" by default.
+3. A candidate must NOT be penalized for missing a "preferred" requirement. Only "minimum" requirements affect the core evaluation.
+
+JOB REQUIREMENTS (posted text):
 ${jobRequirements}
 
 RESUME TEXT:
 ${resumeText}
 
-For each expectation:
-- "Met" = clear, direct evidence in the resume that satisfies the requirement
-- "Partially Met" = some related experience exists but does not fully satisfy the requirement (explain what is missing)
+For each requirement found in the job posting:
+- "Met" = clear, direct evidence in the resume
+- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
 - "Not Evident" = no evidence found in the resume
 
 IMPORTANT:
-- For "Met": Quote or closely paraphrase the specific resume text that demonstrates the requirement is satisfied.
-- For "Partially Met": Describe what the resume shows AND what is missing or insufficient.
+- For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
+- For "Partially Met": Describe what the resume shows AND what gap remains.
 - For "Not Evident": Leave evidence as empty string.
-- Be specific and traceable -- a reader should be able to verify your assessment by looking at the resume.
+- Do NOT fabricate requirements. Every expectation you return must be traceable to specific text in the job posting.
 
-Return 8-15 key expectations covering: required credentials/licenses, years of experience, clinical/technical skills, education, certifications, and any other stated requirements.`,
+Return all requirements found in the posting (typically 8-20).`,
   });
   return (output as { checks: ExpectationCheck[] })?.checks || [];
 }
@@ -350,27 +362,42 @@ function computeOverallMatch(
   match: "Strong" | "Medium" | "Weak";
   metCount: number;
   missingCount: number;
+  minimumScore: number;
+  preferredScore: number;
 } {
-  const metCount = expectations.filter((e) => e.status === "Met").length;
-  const partialCount = expectations.filter(
-    (e) => e.status === "Partially Met"
-  ).length;
-  const missingCount = expectations.filter(
-    (e) => e.status === "Not Evident"
-  ).length;
-  const total = expectations.length || 1;
-  const score = (metCount + partialCount * 0.5) / total;
+  // Split into minimum vs preferred
+  const minimumReqs = expectations.filter((e) => e.category === "minimum");
+  const preferredReqs = expectations.filter((e) => e.category === "preferred");
 
+  // Score minimum requirements (these determine the match)
+  const minMet = minimumReqs.filter((e) => e.status === "Met").length;
+  const minPartial = minimumReqs.filter((e) => e.status === "Partially Met").length;
+  const minTotal = minimumReqs.length || 1;
+  const minimumScore = (minMet + minPartial * 0.5) / minTotal;
+
+  // Score preferred requirements (bonus only, cannot hurt)
+  const prefMet = preferredReqs.filter((e) => e.status === "Met").length;
+  const prefPartial = preferredReqs.filter((e) => e.status === "Partially Met").length;
+  const prefTotal = preferredReqs.length || 1;
+  const preferredScore = preferredReqs.length > 0
+    ? (prefMet + prefPartial * 0.5) / prefTotal
+    : 0;
+
+  // Overall counts (across all requirements for display)
+  const metCount = expectations.filter((e) => e.status === "Met").length;
+  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
+
+  // Match is determined ONLY by minimum requirements + relevant experience
   let match: "Strong" | "Medium" | "Weak";
-  if (score >= 0.7 && relevantMonthsTotal >= 12) {
+  if (minimumScore >= 0.7 && relevantMonthsTotal >= 12) {
     match = "Strong";
-  } else if (score >= 0.4) {
+  } else if (minimumScore >= 0.4) {
     match = "Medium";
   } else {
     match = "Weak";
   }
 
-  return { match, metCount, missingCount };
+  return { match, metCount, missingCount, minimumScore, preferredScore };
 }
 
 // ─── POST handler ─────────────────────────────────────────
@@ -607,7 +634,7 @@ export async function POST(req: Request) {
             // 6. Overall match
             const totalRelevantMonths =
               experience.relevantYears * 12 + experience.relevantMonths;
-            const { match, metCount, missingCount } = computeOverallMatch(
+            const { match, metCount, missingCount, minimumScore, preferredScore } = computeOverallMatch(
               expectations,
               totalRelevantMonths
             );
@@ -633,9 +660,15 @@ export async function POST(req: Request) {
             // 8b. Build transparent screening rationale
             const relevantRoles = experience.roleRelevance.filter((r) => r.isRelevant);
             const nonRelevantRoles = experience.roleRelevance.filter((r) => !r.isRelevant);
-            const partiallyMetCount = expectations.filter((e) => e.status === "Partially Met").length;
-            const notEvidentCount = expectations.filter((e) => e.status === "Not Evident").length;
-            const score = expectations.length > 0 ? ((metCount + partiallyMetCount * 0.5) / expectations.length * 100).toFixed(0) : "0";
+
+            const minimumReqs = expectations.filter((e) => e.category === "minimum");
+            const preferredReqs = expectations.filter((e) => e.category === "preferred");
+            const minMet = minimumReqs.filter((e) => e.status === "Met").length;
+            const minPartial = minimumReqs.filter((e) => e.status === "Partially Met").length;
+            const minNotEvident = minimumReqs.filter((e) => e.status === "Not Evident").length;
+            const prefMet = preferredReqs.filter((e) => e.status === "Met").length;
+            const prefPartial = preferredReqs.filter((e) => e.status === "Partially Met").length;
+            const prefNotEvident = preferredReqs.filter((e) => e.status === "Not Evident").length;
 
             let rationale = `SCREENING LOGIC FOR ${(parsed.candidateName || "Unknown Candidate").toUpperCase()} (REQ ${reqId})\n\n`;
 
@@ -649,7 +682,7 @@ export async function POST(req: Request) {
                 const yrs = Math.floor(r.durationMonths / 12);
                 const mos = r.durationMonths % 12;
                 rationale += `   - ${r.title} at ${r.employer} (${r.startDate}-${r.endDate}, ${yrs}y ${mos}m)\n`;
-                rationale += `     Reason: ${r.reason}\n`;
+                rationale += `     Why relevant: ${r.reason}\n`;
               }
               rationale += `\n`;
             }
@@ -660,35 +693,56 @@ export async function POST(req: Request) {
                 const yrs = Math.floor(r.durationMonths / 12);
                 const mos = r.durationMonths % 12;
                 rationale += `   - ${r.title} at ${r.employer} (${r.startDate}-${r.endDate}, ${yrs}y ${mos}m)\n`;
-                rationale += `     Reason excluded: ${r.reason}\n`;
+                rationale += `     Why excluded: ${r.reason}\n`;
               }
               rationale += `\n`;
             }
 
-            rationale += `2. REQUIREMENTS ASSESSMENT\n`;
-            rationale += `   ${expectations.length} key requirements extracted from job posting.\n`;
-            rationale += `   Met: ${metCount} | Partially Met: ${partiallyMetCount} | Not Evident: ${notEvidentCount}\n`;
-            rationale += `   Requirements fulfillment score: ${score}%\n\n`;
+            rationale += `2. MINIMUM REQUIREMENTS (from job posting -- these determine the score)\n`;
+            rationale += `   ${minimumReqs.length} minimum requirement(s) found in posting.\n`;
+            rationale += `   Met: ${minMet} | Partially Met: ${minPartial} | Not Evident: ${minNotEvident}\n`;
+            rationale += `   Minimum requirements score: ${(minimumScore * 100).toFixed(0)}%\n`;
+            for (const e of minimumReqs) {
+              const icon = e.status === "Met" ? "[MET]" : e.status === "Partially Met" ? "[PARTIAL]" : "[MISSING]";
+              rationale += `   ${icon} ${e.expectation}\n`;
+              if (e.evidence) rationale += `         Evidence: ${e.evidence}\n`;
+            }
+            rationale += `\n`;
 
-            rationale += `3. GAP ANALYSIS\n`;
+            if (preferredReqs.length > 0) {
+              rationale += `3. PREFERRED REQUIREMENTS (bonus only -- cannot lower score)\n`;
+              rationale += `   ${preferredReqs.length} preferred requirement(s) found in posting.\n`;
+              rationale += `   Met: ${prefMet} | Partially Met: ${prefPartial} | Not Evident: ${prefNotEvident}\n`;
+              rationale += `   Preferred score: ${(preferredScore * 100).toFixed(0)}% (informational only)\n`;
+              for (const e of preferredReqs) {
+                const icon = e.status === "Met" ? "[MET]" : e.status === "Partially Met" ? "[PARTIAL]" : "[N/A]";
+                rationale += `   ${icon} ${e.expectation}\n`;
+                if (e.evidence) rationale += `         Evidence: ${e.evidence}\n`;
+              }
+              rationale += `\n`;
+            }
+
+            rationale += `${preferredReqs.length > 0 ? "4" : "3"}. GAP ANALYSIS\n`;
             if (gapAnalysis.gapCount === 0) {
               rationale += `   No employment gaps detected in work history.\n\n`;
             } else {
               rationale += `   ${gapAnalysis.gapCount} gap(s) detected totaling ${gapAnalysis.totalGapMonths} months (largest: ${gapAnalysis.largestGapMonths} months).\n\n`;
             }
 
-            rationale += `4. OVERALL MATCH: ${match}\n`;
-            rationale += `   Scoring method: (Met + Partially_Met*0.5) / Total_Requirements = ${score}%.\n`;
+            const sectionNum = preferredReqs.length > 0 ? 5 : 4;
+            rationale += `${sectionNum}. OVERALL MATCH: ${match}\n`;
+            rationale += `   Scoring method: (Minimum_Met + Minimum_Partial*0.5) / Total_Minimum_Reqs = ${(minimumScore * 100).toFixed(0)}%\n`;
+            rationale += `   NOTE: Preferred requirements do NOT count against the candidate.\n`;
             if (match === "Strong") {
-              rationale += `   Score >= 70% AND relevant experience >= 12 months.\n`;
+              rationale += `   Minimum score >= 70% AND relevant experience >= 12 months.\n`;
             } else if (match === "Medium") {
-              rationale += `   Score >= 40% but ${totalRelevantMonths < 12 ? "relevant experience < 12 months" : "score < 70%"}.\n`;
+              rationale += `   Minimum score >= 40% but ${totalRelevantMonths < 12 ? "relevant experience < 12 months" : "minimum score < 70%"}.\n`;
             } else {
-              rationale += `   Score < 40%, indicating limited evidence of meeting job requirements.\n`;
+              rationale += `   Minimum score < 40%, indicating limited evidence of meeting minimum job requirements.\n`;
             }
 
             if (isEdgeCase) {
-              rationale += `\n5. EDGE CASE FLAG: YES\n`;
+              rationale += `\n${sectionNum + 1}. EDGE CASE FLAG: YES\n`;
               const reasons: string[] = [];
               if (hasGaps && hasMixedRelevance) reasons.push("employment gaps combined with mixed role relevance");
               if (hasGaps && lowEvidenceRatio) reasons.push("employment gaps combined with low evidence ratio");

@@ -84,6 +84,8 @@ export interface RoleRelevance {
 
 export interface ExpectationCheck {
   expectation: string;
+  /** Whether this requirement is a minimum (must-have) or preferred (nice-to-have) */
+  category: "minimum" | "preferred";
   status: "Met" | "Partially Met" | "Not Evident";
   evidence: string;
 }

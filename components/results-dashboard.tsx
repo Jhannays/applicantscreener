@@ -48,40 +48,78 @@ const statusStyles: Record<string, string> = {
 const PAGE_SIZE = 15;
 
 function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
+  const minimumChecks = checks.filter((c) => c.category === "minimum");
+  const preferredChecks = checks.filter((c) => c.category === "preferred");
+  // Fallback for old data that may not have category
+  const uncategorized = checks.filter((c) => !c.category);
+
+  const renderRows = (items: ExpectationCheck[]) =>
+    items.map((c, i) => (
+      <tr key={i} className="border-b border-border last:border-0">
+        <td className="px-3 py-2 text-sm text-foreground">
+          {c.expectation}
+        </td>
+        <td className="px-3 py-2">
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[c.status] || ""}`}
+          >
+            {c.status}
+          </span>
+        </td>
+        <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
+          {c.evidence || "--"}
+        </td>
+      </tr>
+    ));
+
   return (
     <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50">
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-              Expectation
+              Requirement
             </th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
               Status
             </th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-              Evidence
+              Evidence from Resume
             </th>
           </tr>
         </thead>
         <tbody>
-          {checks.map((c, i) => (
-            <tr key={i} className="border-b border-border last:border-0">
-              <td className="px-3 py-2 text-sm text-foreground">
-                {c.expectation}
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[c.status] || ""}`}
-                >
-                  {c.status}
-                </span>
-              </td>
-              <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
-                {c.evidence || "--"}
-              </td>
-            </tr>
-          ))}
+          {minimumChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-muted/30 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Minimum Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (determines score)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(minimumChecks)}
+            </>
+          )}
+          {preferredChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-blue-500/5 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+                    Preferred Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (bonus only -- does not lower score)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(preferredChecks)}
+            </>
+          )}
+          {uncategorized.length > 0 && renderRows(uncategorized)}
         </tbody>
       </table>
     </div>
@@ -118,14 +156,28 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
               ) : (
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-foreground">
                   <span>
-                    Relevant: <strong>{result.relevantYears}y {result.relevantMonths}m</strong> ({result.roleRelevance.filter((r) => r.isRelevant).length} of {result.roleRelevance.length} roles)
+                    Relevant Exp: <strong>{result.relevantYears}y {result.relevantMonths}m</strong> ({result.roleRelevance.filter((r) => r.isRelevant).length} of {result.roleRelevance.length} roles)
                   </span>
-                  <span>
-                    Requirements: <strong>{result.keyRequirementsMetCount}</strong> met / <strong>{result.expectations.filter((e) => e.status === "Partially Met").length}</strong> partial / <strong>{result.keyRequirementsMissingCount}</strong> not evident
-                  </span>
-                  <span>
-                    Score: <strong>{result.expectations.length > 0 ? ((result.keyRequirementsMetCount + result.expectations.filter((e) => e.status === "Partially Met").length * 0.5) / result.expectations.length * 100).toFixed(0) : 0}%</strong>
-                  </span>
+                  {(() => {
+                    const minReqs = result.expectations.filter((e) => e.category === "minimum");
+                    const prefReqs = result.expectations.filter((e) => e.category === "preferred");
+                    const minMet = minReqs.filter((e) => e.status === "Met").length;
+                    const minPartial = minReqs.filter((e) => e.status === "Partially Met").length;
+                    const minTotal = minReqs.length || 1;
+                    const minScore = ((minMet + minPartial * 0.5) / minTotal * 100).toFixed(0);
+                    return (
+                      <>
+                        <span>
+                          Minimum Reqs: <strong>{minMet}</strong>/{minReqs.length} met ({minScore}%)
+                        </span>
+                        {prefReqs.length > 0 && (
+                          <span className="text-blue-700">
+                            Preferred: {prefReqs.filter((e) => e.status === "Met").length}/{prefReqs.length} met (bonus)
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                   {result.isEdgeCase && (
                     <span className="font-medium text-amber-700">Edge case -- manual review recommended</span>
                   )}
