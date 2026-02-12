@@ -413,6 +413,7 @@ export default function Home() {
               total={state.totalToProcess}
               completedCount={state.results.length}
               errorCount={state.errors.length}
+              duplicateCount={state.duplicateCount}
               activityLog={state.activityLog}
             />
           </div>
