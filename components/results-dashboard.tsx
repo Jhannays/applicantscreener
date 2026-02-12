@@ -471,11 +471,6 @@ export function ResultsDashboard({
       "Gap Present? (Y/N)",
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
-      "Relevant Roles",
-      "Non-Relevant Roles",
-      "Requirements Met",
-      "Requirements Not Met",
-      "Screening Rationale",
     ];
 
     const rows = results.map((r) => {
@@ -489,23 +484,6 @@ export function ResultsDashboard({
       const nonRelevant = r.nonRelevantExperienceCounted ? "Y" : "N";
       const edgeCase = r.isEdgeCase ? "Y" : "N";
 
-      const relevantRolesStr = r.roleRelevance
-        .filter((rr) => rr.isRelevant)
-        .map((rr) => `${rr.title} at ${rr.employer} (${Math.floor(rr.durationMonths / 12)}y ${rr.durationMonths % 12}m): ${rr.reason}`)
-        .join("; ");
-      const nonRelevantRolesStr = r.roleRelevance
-        .filter((rr) => !rr.isRelevant)
-        .map((rr) => `${rr.title} at ${rr.employer} (${Math.floor(rr.durationMonths / 12)}y ${rr.durationMonths % 12}m): ${rr.reason}`)
-        .join("; ");
-      const reqMetStr = r.expectations
-        .filter((e) => e.status === "Met")
-        .map((e) => `${e.expectation}: ${e.evidence}`)
-        .join("; ");
-      const reqNotMetStr = r.expectations
-        .filter((e) => e.status === "Not Evident")
-        .map((e) => e.expectation)
-        .join("; ");
-
       return [
         csvEscape(r.reqId),
         csvEscape(r.candidateName),
@@ -516,11 +494,6 @@ export function ResultsDashboard({
         gapPresent,
         nonRelevant,
         edgeCase,
-        csvEscape(relevantRolesStr || "None"),
-        csvEscape(nonRelevantRolesStr || "None"),
-        csvEscape(reqMetStr || "None"),
-        csvEscape(reqNotMetStr || "None"),
-        csvEscape(r.screeningRationale || ""),
       ].join(",");
     });
 
