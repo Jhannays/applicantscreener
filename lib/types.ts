@@ -110,7 +110,11 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
+  /** Transparent explanation of the overall screening logic and decision */
+  screeningRationale: string;
+  /** true when some non-relevant roles exist (total exp > relevant exp) */
   nonRelevantExperienceCounted: boolean;
+  /** true when an ambiguity is detected: gaps, mixed relevance, low evidence, etc. */
   isEdgeCase: boolean;
   notes: string;
 }

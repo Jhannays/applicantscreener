@@ -89,6 +89,8 @@ function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
 }
 
 function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
+  const [showFullRationale, setShowFullRationale] = useState(false);
+
   return (
     <tr>
       <td
@@ -96,6 +98,42 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
         className="border-b border-border bg-muted/10 px-4 py-5"
       >
         <div className="space-y-5">
+          {/* Screening Logic Rationale */}
+          {result.screeningRationale && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <FileText className="h-3.5 w-3.5" />
+                  Screening Logic & Rationale
+                </h4>
+                <button
+                  onClick={() => setShowFullRationale(!showFullRationale)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  {showFullRationale ? "Collapse" : "View Full Rationale"}
+                </button>
+              </div>
+              {showFullRationale ? (
+                <pre className="whitespace-pre-wrap text-xs leading-relaxed text-foreground font-mono">{result.screeningRationale}</pre>
+              ) : (
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-foreground">
+                  <span>
+                    Relevant: <strong>{result.relevantYears}y {result.relevantMonths}m</strong> ({result.roleRelevance.filter((r) => r.isRelevant).length} of {result.roleRelevance.length} roles)
+                  </span>
+                  <span>
+                    Requirements: <strong>{result.keyRequirementsMetCount}</strong> met / <strong>{result.expectations.filter((e) => e.status === "Partially Met").length}</strong> partial / <strong>{result.keyRequirementsMissingCount}</strong> not evident
+                  </span>
+                  <span>
+                    Score: <strong>{result.expectations.length > 0 ? ((result.keyRequirementsMetCount + result.expectations.filter((e) => e.status === "Partially Met").length * 0.5) / result.expectations.length * 100).toFixed(0) : 0}%</strong>
+                  </span>
+                  {result.isEdgeCase && (
+                    <span className="font-medium text-amber-700">Edge case -- manual review recommended</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Education / Skills / Certs */}
           <div className="grid gap-4 md:grid-cols-3">
             <div>
@@ -182,47 +220,50 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                       Relevant?
                     </th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                      Reason
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.roleRelevance.map((r, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-3 py-2 text-sm text-foreground">
-                        {r.employer}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-foreground">
-                        {r.title}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                        {r.startDate} - {r.endDate}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                        {Math.floor(r.durationMonths / 12)}y{" "}
-                        {r.durationMonths % 12}m
-                      </td>
-                      <td className="px-3 py-2">
-                        {r.isRelevant ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                            <CheckCircle className="h-3 w-3" />
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                            <XCircle className="h-3 w-3" />
-                            No
-                          </span>
-                        )}
-                      </td>
-                      <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
-                        {r.reason}
-                      </td>
-                    </tr>
+                    <tbody key={i}>
+                      <tr
+                        className="border-b border-border/50"
+                      >
+                        <td className="px-3 py-2 text-sm font-medium text-foreground">
+                          {r.employer}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-foreground">
+                          {r.title}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                          {r.startDate} - {r.endDate}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                          {Math.floor(r.durationMonths / 12)}y{" "}
+                          {r.durationMonths % 12}m
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.isRelevant ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              Relevant
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
+                              <XCircle className="h-3.5 w-3.5" />
+                              Not Relevant
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-border last:border-0">
+                        <td colSpan={5} className="px-3 pb-3 pt-0">
+                          <div className={`rounded-md px-3 py-2 text-xs leading-relaxed ${r.isRelevant ? "bg-emerald-500/5 text-emerald-900" : "bg-red-500/5 text-red-900"}`}>
+                            <span className="font-semibold">{r.isRelevant ? "Why relevant: " : "Why excluded: "}</span>
+                            {r.reason}
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
                   ))}
                 </tbody>
               </table>
@@ -430,6 +471,11 @@ export function ResultsDashboard({
       "Gap Present? (Y/N)",
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
+      "Relevant Roles",
+      "Non-Relevant Roles",
+      "Requirements Met",
+      "Requirements Not Met",
+      "Screening Rationale",
     ];
 
     const rows = results.map((r) => {
@@ -443,6 +489,23 @@ export function ResultsDashboard({
       const nonRelevant = r.nonRelevantExperienceCounted ? "Y" : "N";
       const edgeCase = r.isEdgeCase ? "Y" : "N";
 
+      const relevantRolesStr = r.roleRelevance
+        .filter((rr) => rr.isRelevant)
+        .map((rr) => `${rr.title} at ${rr.employer} (${Math.floor(rr.durationMonths / 12)}y ${rr.durationMonths % 12}m): ${rr.reason}`)
+        .join("; ");
+      const nonRelevantRolesStr = r.roleRelevance
+        .filter((rr) => !rr.isRelevant)
+        .map((rr) => `${rr.title} at ${rr.employer} (${Math.floor(rr.durationMonths / 12)}y ${rr.durationMonths % 12}m): ${rr.reason}`)
+        .join("; ");
+      const reqMetStr = r.expectations
+        .filter((e) => e.status === "Met")
+        .map((e) => `${e.expectation}: ${e.evidence}`)
+        .join("; ");
+      const reqNotMetStr = r.expectations
+        .filter((e) => e.status === "Not Evident")
+        .map((e) => e.expectation)
+        .join("; ");
+
       return [
         csvEscape(r.reqId),
         csvEscape(r.candidateName),
@@ -453,6 +516,11 @@ export function ResultsDashboard({
         gapPresent,
         nonRelevant,
         edgeCase,
+        csvEscape(relevantRolesStr || "None"),
+        csvEscape(nonRelevantRolesStr || "None"),
+        csvEscape(reqMetStr || "None"),
+        csvEscape(reqNotMetStr || "None"),
+        csvEscape(r.screeningRationale || ""),
       ].join(",");
     });
 
@@ -520,6 +588,11 @@ export function ResultsDashboard({
       md += `**Overall Match:** ${r.overallMatch}\n`;
       md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
       md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n\n`;
+
+      if (r.screeningRationale) {
+        md += "### Screening Rationale\n\n";
+        md += "```\n" + r.screeningRationale + "\n```\n\n";
+      }
 
       if (r.education.length > 0) {
         md += "### Education\n\n";

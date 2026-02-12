@@ -147,11 +147,15 @@ async function evaluateRoleRelevance(
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
     output: Output.object({ schema: roleRelevanceSchema }),
-    prompt: `You are an expert HR recruiter. For EACH role below, determine if it is RELEVANT to the job requirements.
+    prompt: `You are an expert HR recruiter performing a transparent, auditable relevance evaluation. For EACH role below, determine if it is RELEVANT to the job requirements.
 
-A role is relevant ONLY if the work performed directly relates to the skills, domain, or experience the job requires. Be strict:
-- If the job asks for healthcare experience, a daycare role is NOT relevant.
+A role is relevant ONLY if the work performed directly relates to the skills, domain, or experience the job requires.
+
+STRICT RULES:
+- If the job asks for healthcare/nursing experience, a daycare or food-service role is NOT relevant.
 - If the job asks for software engineering, a retail role is NOT relevant.
+- Generic administrative or supervisory experience is NOT relevant unless the job explicitly asks for it.
+- "Relevant" means the daily duties align with what the job posting describes.
 
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -159,7 +163,14 @@ ${jobRequirements}
 CANDIDATE ROLES:
 ${rolesDesc}
 
-For each role, return isRelevant (true/false) and a brief reason.`,
+For each role you MUST return:
+- isRelevant: true or false
+- reason: A DETAILED explanation (2-4 sentences) that:
+  1. Names the specific job requirement(s) the role does or does not match
+  2. References specific duties or bullets from the role
+  3. Explains the connection or mismatch clearly
+  Example GOOD reason: "This role involved direct patient care including medication administration and vitals monitoring, which aligns with the RN clinical experience requirement. The charge nurse duties also satisfy the leadership expectation."
+  Example GOOD reason: "While this role involved working with children, the duties (lesson planning, classroom management) do not align with the clinical nursing, patient assessment, or medical documentation requirements of this position."`,
   });
   return (
     (
@@ -184,7 +195,7 @@ async function evaluateExpectations(
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
     output: Output.object({ schema: expectationsSchema }),
-    prompt: `You are an expert HR recruiter. Extract the KEY expectations/requirements from the job description, then for EACH, determine whether this resume provides evidence.
+    prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation. Extract the KEY expectations/requirements from the job description, then for EACH, determine whether this resume provides evidence.
 
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -193,13 +204,17 @@ RESUME TEXT:
 ${resumeText}
 
 For each expectation:
-- "Met" = clear evidence in the resume
-- "Partially Met" = some related experience but not a direct match
-- "Not Evident" = no evidence found
+- "Met" = clear, direct evidence in the resume that satisfies the requirement
+- "Partially Met" = some related experience exists but does not fully satisfy the requirement (explain what is missing)
+- "Not Evident" = no evidence found in the resume
 
-Include a short evidence snippet from the resume for anything Met or Partially Met. For "Not Evident", leave evidence as empty string.
+IMPORTANT:
+- For "Met": Quote or closely paraphrase the specific resume text that demonstrates the requirement is satisfied.
+- For "Partially Met": Describe what the resume shows AND what is missing or insufficient.
+- For "Not Evident": Leave evidence as empty string.
+- Be specific and traceable -- a reader should be able to verify your assessment by looking at the resume.
 
-Return 5-15 key expectations.`,
+Return 8-15 key expectations covering: required credentials/licenses, years of experience, clinical/technical skills, education, certifications, and any other stated requirements.`,
   });
   return (output as { checks: ExpectationCheck[] })?.checks || [];
 }
@@ -615,6 +630,72 @@ export async function POST(req: Request) {
               (hasGaps && lowEvidenceRatio) ||
               veryShortRelevant;
 
+            // 8b. Build transparent screening rationale
+            const relevantRoles = experience.roleRelevance.filter((r) => r.isRelevant);
+            const nonRelevantRoles = experience.roleRelevance.filter((r) => !r.isRelevant);
+            const partiallyMetCount = expectations.filter((e) => e.status === "Partially Met").length;
+            const notEvidentCount = expectations.filter((e) => e.status === "Not Evident").length;
+            const score = expectations.length > 0 ? ((metCount + partiallyMetCount * 0.5) / expectations.length * 100).toFixed(0) : "0";
+
+            let rationale = `SCREENING LOGIC FOR ${(parsed.candidateName || "Unknown Candidate").toUpperCase()} (REQ ${reqId})\n\n`;
+
+            rationale += `1. EXPERIENCE ANALYSIS\n`;
+            rationale += `   Total work history: ${experience.totalYears} years ${experience.totalMonths} months across ${parsed.workExperience.length} role(s).\n`;
+            rationale += `   Relevant experience: ${experience.relevantYears} years ${experience.relevantMonths} months (${relevantRoles.length} of ${parsed.workExperience.length} roles deemed relevant).\n\n`;
+
+            if (relevantRoles.length > 0) {
+              rationale += `   RELEVANT ROLES (counted toward experience):\n`;
+              for (const r of relevantRoles) {
+                const yrs = Math.floor(r.durationMonths / 12);
+                const mos = r.durationMonths % 12;
+                rationale += `   - ${r.title} at ${r.employer} (${r.startDate}-${r.endDate}, ${yrs}y ${mos}m)\n`;
+                rationale += `     Reason: ${r.reason}\n`;
+              }
+              rationale += `\n`;
+            }
+
+            if (nonRelevantRoles.length > 0) {
+              rationale += `   NON-RELEVANT ROLES (excluded from relevant experience count):\n`;
+              for (const r of nonRelevantRoles) {
+                const yrs = Math.floor(r.durationMonths / 12);
+                const mos = r.durationMonths % 12;
+                rationale += `   - ${r.title} at ${r.employer} (${r.startDate}-${r.endDate}, ${yrs}y ${mos}m)\n`;
+                rationale += `     Reason excluded: ${r.reason}\n`;
+              }
+              rationale += `\n`;
+            }
+
+            rationale += `2. REQUIREMENTS ASSESSMENT\n`;
+            rationale += `   ${expectations.length} key requirements extracted from job posting.\n`;
+            rationale += `   Met: ${metCount} | Partially Met: ${partiallyMetCount} | Not Evident: ${notEvidentCount}\n`;
+            rationale += `   Requirements fulfillment score: ${score}%\n\n`;
+
+            rationale += `3. GAP ANALYSIS\n`;
+            if (gapAnalysis.gapCount === 0) {
+              rationale += `   No employment gaps detected in work history.\n\n`;
+            } else {
+              rationale += `   ${gapAnalysis.gapCount} gap(s) detected totaling ${gapAnalysis.totalGapMonths} months (largest: ${gapAnalysis.largestGapMonths} months).\n\n`;
+            }
+
+            rationale += `4. OVERALL MATCH: ${match}\n`;
+            rationale += `   Scoring method: (Met + Partially_Met*0.5) / Total_Requirements = ${score}%.\n`;
+            if (match === "Strong") {
+              rationale += `   Score >= 70% AND relevant experience >= 12 months.\n`;
+            } else if (match === "Medium") {
+              rationale += `   Score >= 40% but ${totalRelevantMonths < 12 ? "relevant experience < 12 months" : "score < 70%"}.\n`;
+            } else {
+              rationale += `   Score < 40%, indicating limited evidence of meeting job requirements.\n`;
+            }
+
+            if (isEdgeCase) {
+              rationale += `\n5. EDGE CASE FLAG: YES\n`;
+              const reasons: string[] = [];
+              if (hasGaps && hasMixedRelevance) reasons.push("employment gaps combined with mixed role relevance");
+              if (hasGaps && lowEvidenceRatio) reasons.push("employment gaps combined with low evidence ratio");
+              if (veryShortRelevant) reasons.push("less than 6 months of relevant experience");
+              rationale += `   Reason: ${reasons.join("; ")}. Manual review recommended.\n`;
+            }
+
             const result: ApplicantResult = {
               reqId,
               resumeFile: fileName,
@@ -633,6 +714,7 @@ export async function POST(req: Request) {
               keyRequirementsMetCount: metCount,
               keyRequirementsMissingCount: missingCount,
               overallMatch: match,
+              screeningRationale: rationale,
               nonRelevantExperienceCounted,
               isEdgeCase,
               notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
