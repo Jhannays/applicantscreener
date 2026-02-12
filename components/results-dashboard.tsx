@@ -438,7 +438,7 @@ export function ResultsDashboard({
         .join("; ");
       const skillsStr = r.skills.join("; ");
       const certsStr = r.certifications.join("; ");
-      const yoeStr = `${r.relevantYears}y ${r.relevantMonths}m relevant / ${r.totalYears}y ${r.totalMonths}m total`;
+      const yoeStr = `${r.relevantYears} years ${r.relevantMonths} months relevant / ${r.totalYears} years ${r.totalMonths} months total`;
       const gapPresent = r.gapAnalysis.gapCount > 0 ? "Y" : "N";
       const nonRelevant = r.nonRelevantExperienceCounted ? "Y" : "N";
       const edgeCase = r.isEdgeCase ? "Y" : "N";

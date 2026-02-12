@@ -2,6 +2,8 @@ export const maxDuration = 300; // 5 minutes for large batches
 
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import crypto from "crypto";
+import { createClient } from "@/lib/supabase/server";
 import type {
   ApplicantResult,
   GapAnalysis,
@@ -423,16 +425,73 @@ export async function POST(req: Request) {
       });
     }
 
-    const totalCount = matchedPairs.length;
+    // ── Compute file hashes and check for duplicates in Supabase ──
+    const supabase = await createClient();
+    const pairsWithHash: (typeof matchedPairs[number] & { fileHash: string })[] = [];
+
+    for (const pair of matchedPairs) {
+      const arrayBuf = await pair.file.arrayBuffer();
+      const hash = crypto
+        .createHash("sha256")
+        .update(Buffer.from(arrayBuf))
+        .digest("hex");
+      pairsWithHash.push({ ...pair, fileHash: hash });
+    }
+
+    // Batch-check which hashes already exist
+    const hashes = pairsWithHash.map((p) => p.fileHash);
+    const { data: existingRows } = await supabase
+      .from("screened_resumes")
+      .select("file_hash, req_id, candidate_name, result_json")
+      .in("file_hash", hashes);
+
+    const existingMap = new Map(
+      (existingRows || []).map((r) => [`${r.req_id}:${r.file_hash}`, r])
+    );
+
+    const duplicates: typeof pairsWithHash = [];
+    const toProcess: typeof pairsWithHash = [];
+
+    for (const pair of pairsWithHash) {
+      const key = `${pair.reqId}:${pair.fileHash}`;
+      if (existingMap.has(key)) {
+        duplicates.push(pair);
+      } else {
+        toProcess.push(pair);
+      }
+    }
+
+    const totalCount = toProcess.length;
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Report duplicates first
+        for (const dup of duplicates) {
+          const key = `${dup.reqId}:${dup.fileHash}`;
+          const existing = existingMap.get(key);
+          if (existing?.result_json) {
+            // Return the previously stored result
+            controller.enqueue(
+              encoder.encode(
+                JSON.stringify({
+                  type: "duplicate",
+                  fileName: dup.fileName,
+                  reqId: dup.reqId,
+                  candidateName: existing.candidate_name,
+                  previousResult: existing.result_json,
+                }) + "\n"
+              )
+            );
+          }
+        }
+
         controller.enqueue(
           encoder.encode(
             JSON.stringify({
               type: "info",
               totalToProcess: totalCount,
+              duplicateCount: duplicates.length,
               skippedErrors,
             }) + "\n"
           )
@@ -456,7 +515,7 @@ export async function POST(req: Request) {
           const { reqId, jobContent, fileName, file } = item;
 
           // Each resume has 3 sub-steps for smoother progress
-          const baseIndex = matchedPairs.indexOf(item);
+          const baseIndex = toProcess.indexOf(item);
           const sendSubProgress = (subStep: number) => {
             // subStep: 0 = extracting, 1 = parsing, 2 = evaluating
             send({
@@ -579,6 +638,30 @@ export async function POST(req: Request) {
               notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
             };
 
+            // Save to Supabase for duplicate tracking
+            try {
+              await supabase.from("screened_resumes").upsert(
+                {
+                  req_id: reqId,
+                  file_name: fileName,
+                  file_hash: (item as typeof pairsWithHash[number]).fileHash,
+                  candidate_name: result.candidateName,
+                  relevant_years: result.relevantYears,
+                  relevant_months: result.relevantMonths,
+                  total_years: result.totalYears,
+                  total_months: result.totalMonths,
+                  overall_match: result.overallMatch,
+                  gap_present: result.gapAnalysis.gapCount > 0,
+                  non_relevant_experience: result.nonRelevantExperienceCounted,
+                  is_edge_case: result.isEdgeCase,
+                  result_json: result,
+                },
+                { onConflict: "req_id,file_hash" }
+              );
+            } catch {
+              // Non-fatal: continue even if DB save fails
+            }
+
             send({ type: "result", data: result });
           } catch (err) {
             let errorMessage = "Unknown error";
@@ -602,8 +685,8 @@ export async function POST(req: Request) {
         }
 
         // Process in batches of BATCH_SIZE
-        for (let i = 0; i < matchedPairs.length; i += BATCH_SIZE) {
-          const batch = matchedPairs.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+          const batch = toProcess.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(processOne));
         }
 
