@@ -610,9 +610,9 @@ export async function POST(req: Request) {
       }[];
     };
 
-    if (!manifest.jobs?.length || !manifest.resumes?.length) {
+    if (!manifest.resumes?.length) {
       return Response.json(
-        { error: "Both job requirement files and resume files are required." },
+        { error: "Resume files are required." },
         { status: 400 }
       );
     }
@@ -654,9 +654,26 @@ export async function POST(req: Request) {
 
     for (const resume of manifest.resumes) {
       const jobContent = jobMap.get(resume.reqId);
-      if (!jobContent) {
+      const csvRow = csvMap.get(resume.reqId);
+
+      // Build job requirements text: prefer .txt file, fall back to CSV fields
+      let effectiveJobContent = jobContent || "";
+      if (!effectiveJobContent && csvRow) {
+        const parts: string[] = [];
+        if (csvRow.jobQualifications) parts.push(csvRow.jobQualifications);
+        if (csvRow.qualifications) parts.push(csvRow.qualifications);
+        if (csvRow.experienceNeeded) parts.push(`Experience Needed: ${csvRow.experienceNeeded}`);
+        if (csvRow.educationNeeded) parts.push(`Education Needed: ${csvRow.educationNeeded}`);
+        if (csvRow.certificationsRequired) parts.push(`Required Certifications: ${csvRow.certificationsRequired}`);
+        if (csvRow.certificationNeeded) parts.push(`Required Certifications: ${csvRow.certificationNeeded}`);
+        if (csvRow.minYearsExperience) parts.push(`Minimum Years Experience: ${csvRow.minYearsExperience}`);
+        if (csvRow.preferredYearsExperience) parts.push(`Preferred Years Experience: ${csvRow.preferredYearsExperience}`);
+        effectiveJobContent = parts.join("\n");
+      }
+
+      if (!effectiveJobContent) {
         skippedErrors.push(
-          `Skipped REQ ${resume.reqId}: no matching job requirements file found`
+          `Skipped REQ ${resume.reqId}: no matching job requirements file or CSV row found`
         );
         continue;
       }
@@ -664,10 +681,10 @@ export async function POST(req: Request) {
       if (!file) continue;
       matchedPairs.push({
         reqId: resume.reqId,
-        jobContent,
+        jobContent: effectiveJobContent,
         fileName: resume.fileName,
         file,
-        csvRow: csvMap.get(resume.reqId),
+        csvRow,
       });
     }
 

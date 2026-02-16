@@ -35,7 +35,8 @@ export default function Home() {
   const [state, setState] = useState<ScreeningState>(initialState);
 
   const handleScreen = useCallback(async () => {
-    if (state.jobFiles.length === 0 || state.resumeFiles.length === 0) return;
+    const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
+    if (!hasJobSource || state.resumeFiles.length === 0) return;
 
     setState((prev) => ({
       ...prev,
@@ -249,11 +250,14 @@ export default function Home() {
     setState(initialState);
   }, []);
 
-  const canScreen = state.jobFiles.length > 0 && state.resumeFiles.length > 0;
+  const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
+  const canScreen = hasJobSource && state.resumeFiles.length > 0;
 
+  // Count resumes matched to either a .txt job file or a CSV row
   const jobReqIds = new Set(state.jobFiles.map((j) => j.reqId));
+  const csvReqIds = new Set(state.requisitionCSV.map((r) => r.requisitionNumber));
   const matchedResumeCount = state.resumeFiles.filter((r) =>
-    jobReqIds.has(r.reqId)
+    jobReqIds.has(r.reqId) || csvReqIds.has(r.reqId)
   ).length;
 
   return (
@@ -347,17 +351,30 @@ export default function Home() {
             <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  {state.jobFiles.length > 0 &&
-                  state.resumeFiles.length > 0 ? (
+                  {hasJobSource && state.resumeFiles.length > 0 ? (
                     <span>
                       <strong className="text-foreground">
                         {matchedResumeCount}
                       </strong>{" "}
-                      resume{matchedResumeCount !== 1 ? "s" : ""} matched to{" "}
-                      <strong className="text-foreground">
-                        {state.jobFiles.length}
-                      </strong>{" "}
-                      job{state.jobFiles.length !== 1 ? "s" : ""}
+                      resume{matchedResumeCount !== 1 ? "s" : ""} matched
+                      {state.requisitionCSV.length > 0 && (
+                        <span>
+                          {" "}to{" "}
+                          <strong className="text-foreground">
+                            {state.requisitionCSV.length}
+                          </strong>{" "}
+                          CSV requisition{state.requisitionCSV.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {state.jobFiles.length > 0 && (
+                        <span>
+                          {state.requisitionCSV.length > 0 ? " + " : " to "}
+                          <strong className="text-foreground">
+                            {state.jobFiles.length}
+                          </strong>{" "}
+                          job file{state.jobFiles.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
                       {state.resumeFiles.length - matchedResumeCount > 0 && (
                         <span className="ml-1 text-amber-600">
                           ({state.resumeFiles.length - matchedResumeCount}{" "}
@@ -367,7 +384,7 @@ export default function Home() {
                     </span>
                   ) : (
                     <span>
-                      Upload job requirements and resumes to begin screening.
+                      Upload a requisition CSV or job files, and resumes to begin screening.
                     </span>
                   )}
                 </div>
