@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Download,
   ChevronDown,
@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import type {
   ApplicantResult,
   ExpectationCheck,
@@ -31,6 +32,7 @@ interface ResultsDashboardProps {
   errors: ScreeningError[];
   globalErrors: string[];
   onReset: () => void;
+  onResultsChange: (results: ApplicantResult[]) => void;
 }
 
 const matchStyles: Record<string, string> = {
@@ -47,24 +49,48 @@ const statusStyles: Record<string, string> = {
 
 const PAGE_SIZE = 15;
 
-function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
+const statusCycle: ExpectationCheck["status"][] = ["Met", "Partially Met", "Not Evident"];
+
+function ExpectationsTable({
+  checks,
+  onStatusChange,
+}: {
+  checks: ExpectationCheck[];
+  onStatusChange?: (index: number, newStatus: ExpectationCheck["status"]) => void;
+}) {
   const minimumChecks = checks.filter((c) => c.category === "minimum");
   const preferredChecks = checks.filter((c) => c.category === "preferred");
   // Fallback for old data that may not have category
   const uncategorized = checks.filter((c) => !c.category);
+
+  const handleCycle = (check: ExpectationCheck) => {
+    if (!onStatusChange) return;
+    const globalIndex = checks.indexOf(check);
+    const currentIdx = statusCycle.indexOf(check.status);
+    const nextStatus = statusCycle[(currentIdx + 1) % statusCycle.length];
+    onStatusChange(globalIndex, nextStatus);
+  };
 
   const renderRows = (items: ExpectationCheck[]) =>
     items.map((c, i) => (
       <tr key={i} className="border-b border-border last:border-0">
         <td className="px-3 py-2 text-sm text-foreground">
           {c.expectation}
+          {c.manualOverride && (
+            <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+              OVERRIDDEN
+            </span>
+          )}
         </td>
         <td className="px-3 py-2">
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles[c.status] || ""}`}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCycle(c); }}
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-primary/30 ${statusStyles[c.status] || ""}`}
+            title="Click to cycle status: Met / Partially Met / Not Evident"
           >
+            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
             {c.status}
-          </span>
+          </button>
         </td>
         <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
           {c.evidence || "--"}
@@ -126,8 +152,19 @@ function ExpectationsTable({ checks }: { checks: ExpectationCheck[] }) {
   );
 }
 
-function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
+function ApplicantExpandedRow({
+  result,
+  onToggleRelevance,
+  onChangeExpectationStatus,
+}: {
+  result: ApplicantResult;
+  onToggleRelevance: (roleIndex: number) => void;
+  onChangeExpectationStatus: (expIndex: number, newStatus: ExpectationCheck["status"]) => void;
+}) {
   const [showFullRationale, setShowFullRationale] = useState(false);
+
+  const hasOverrides = result.roleRelevance.some((r) => r.manualOverride) ||
+    result.expectations.some((e) => e.manualOverride);
 
   return (
     <tr>
@@ -136,6 +173,16 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
         className="border-b border-border bg-muted/10 px-4 py-5"
       >
         <div className="space-y-5">
+          {/* Human override notice */}
+          {hasOverrides && (
+            <div className="flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+              <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+              <span className="text-xs font-medium text-blue-700">
+                This candidate has manual overrides applied. Values shown reflect reviewer adjustments.
+              </span>
+            </div>
+          )}
+
           {/* Screening Logic Rationale */}
           {result.screeningRationale && (
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
@@ -294,15 +341,21 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
                           {r.durationMonths % 12}m
                         </td>
                         <td className="px-3 py-2">
-                          {r.isRelevant ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Relevant
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
-                              <XCircle className="h-3.5 w-3.5" />
-                              Not Relevant
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onToggleRelevance(i); }}
+                            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
+                              r.isRelevant
+                                ? "bg-emerald-500/10 text-emerald-600"
+                                : "bg-red-500/10 text-red-500"
+                            }`}
+                            title="Click to toggle relevance"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                            {r.isRelevant ? "Relevant" : "Not Relevant"}
+                          </button>
+                          {r.manualOverride && (
+                            <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                              OVERRIDDEN
                             </span>
                           )}
                         </td>
@@ -381,7 +434,7 @@ function ApplicantExpandedRow({ result }: { result: ApplicantResult }) {
               Job Expects vs Resume Shows
             </h4>
             {result.expectations.length > 0 ? (
-              <ExpectationsTable checks={result.expectations} />
+              <ExpectationsTable checks={result.expectations} onStatusChange={onChangeExpectationStatus} />
             ) : (
               <p className="text-xs text-muted-foreground">
                 No expectations data available.
@@ -409,8 +462,76 @@ export function ResultsDashboard({
   errors,
   globalErrors,
   onReset,
+  onResultsChange,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Recalculate derived fields after a toggle and propagate up
+  const recalculateAndUpdate = useCallback(
+    (resultIndex: number, updatedResult: ApplicantResult) => {
+      // Recalculate relevant experience from role relevance
+      const totalRelevantMonths = updatedResult.roleRelevance
+        .filter((r) => r.isRelevant)
+        .reduce((sum, r) => sum + r.durationMonths, 0);
+      updatedResult.relevantYears = Math.floor(totalRelevantMonths / 12);
+      updatedResult.relevantMonths = totalRelevantMonths % 12;
+
+      // Recalculate non-relevant flag
+      const totalMonths = updatedResult.roleRelevance.reduce((sum, r) => sum + r.durationMonths, 0);
+      updatedResult.nonRelevantExperienceCounted = totalRelevantMonths < totalMonths;
+
+      // Recalculate expectations-based scores (only minimum reqs determine match)
+      const minReqs = updatedResult.expectations.filter((e) => e.category === "minimum");
+      const minMet = minReqs.filter((e) => e.status === "Met").length;
+      const minPartial = minReqs.filter((e) => e.status === "Partially Met").length;
+      const minTotal = minReqs.length || 1;
+      const minimumScore = (minMet + minPartial * 0.5) / minTotal;
+
+      updatedResult.keyRequirementsMetCount = updatedResult.expectations.filter((e) => e.status === "Met").length;
+      updatedResult.keyRequirementsMissingCount = updatedResult.expectations.filter((e) => e.status === "Not Evident").length;
+
+      if (minimumScore >= 0.7 && totalRelevantMonths >= 12) {
+        updatedResult.overallMatch = "Strong";
+      } else if (minimumScore >= 0.4) {
+        updatedResult.overallMatch = "Medium";
+      } else {
+        updatedResult.overallMatch = "Weak";
+      }
+
+      const newResults = [...results];
+      newResults[resultIndex] = { ...updatedResult };
+      onResultsChange(newResults);
+    },
+    [results, onResultsChange]
+  );
+
+  const handleToggleRelevance = useCallback(
+    (resultIndex: number, roleIndex: number) => {
+      const result = { ...results[resultIndex] };
+      const roles = [...result.roleRelevance];
+      const role = { ...roles[roleIndex] };
+      role.isRelevant = !role.isRelevant;
+      role.manualOverride = true;
+      roles[roleIndex] = role;
+      result.roleRelevance = roles;
+      recalculateAndUpdate(resultIndex, result);
+    },
+    [results, recalculateAndUpdate]
+  );
+
+  const handleChangeExpectationStatus = useCallback(
+    (resultIndex: number, expIndex: number, newStatus: ExpectationCheck["status"]) => {
+      const result = { ...results[resultIndex] };
+      const expectations = [...result.expectations];
+      const exp = { ...expectations[expIndex] };
+      exp.status = newStatus;
+      exp.manualOverride = true;
+      expectations[expIndex] = exp;
+      result.expectations = expectations;
+      recalculateAndUpdate(resultIndex, result);
+    },
+    [results, recalculateAndUpdate]
+  );
   const [sortKey, setSortKey] = useState<SortKey>("relevantExp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterMatch, setFilterMatch] = useState<string>("All");
@@ -544,7 +665,8 @@ export function ResultsDashboard({
         const mos = role.durationMonths % 12;
         const durationStr = yrs > 0 ? `${yrs}y ${mos}m` : `${mos}m`;
         const relevantTag = role.isRelevant ? "RELEVANT" : "NOT RELEVANT";
-        return `${role.title} at ${role.employer} (${durationStr}, ${relevantTag}): ${role.reason}`;
+        const overrideTag = role.manualOverride ? " [MANUALLY OVERRIDDEN]" : "";
+        return `${role.title} at ${role.employer} (${durationStr}, ${relevantTag}${overrideTag}): ${role.reason}`;
       });
       const reasoningStr = reasoningParts.join("; ");
 
@@ -1067,7 +1189,17 @@ export function ResultsDashboard({
                       </td>
                     </tr>
                     {isExpanded && (
-                      <ApplicantExpandedRow result={result} />
+                      <ApplicantExpandedRow
+                        result={result}
+                        onToggleRelevance={(roleIndex) => {
+                          const globalIndex = results.indexOf(result);
+                          if (globalIndex !== -1) handleToggleRelevance(globalIndex, roleIndex);
+                        }}
+                        onChangeExpectationStatus={(expIndex, newStatus) => {
+                          const globalIndex = results.indexOf(result);
+                          if (globalIndex !== -1) handleChangeExpectationStatus(globalIndex, expIndex, newStatus);
+                        }}
+                      />
                     )}
                   </tbody>
                 );

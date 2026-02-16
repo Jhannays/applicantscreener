@@ -440,6 +440,9 @@ export default function Home() {
               errors={state.errors}
               globalErrors={state.globalErrors}
               onReset={handleReset}
+              onResultsChange={(newResults) =>
+                setState((prev) => ({ ...prev, results: newResults }))
+              }
             />
           </div>
         )}

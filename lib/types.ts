@@ -98,6 +98,8 @@ export interface RoleRelevance {
   isRelevant: boolean;
   reason: string;
   durationMonths: number;
+  /** true when a human reviewer has overridden the AI's relevance determination */
+  manualOverride?: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -110,6 +112,8 @@ export interface ExpectationCheck {
   category: "minimum" | "preferred";
   status: "Met" | "Partially Met" | "Not Evident";
   evidence: string;
+  /** true when a human reviewer has overridden the AI's status determination */
+  manualOverride?: boolean;
 }
 
 // ──────────────────────────────────────────────
