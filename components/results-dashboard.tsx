@@ -25,6 +25,7 @@ import type {
   ApplicantResult,
   ExpectationCheck,
   ScreeningError,
+  CorrectionRule,
 } from "@/lib/types";
 
 interface ResultsDashboardProps {
@@ -33,6 +34,8 @@ interface ResultsDashboardProps {
   globalErrors: string[];
   onReset: () => void;
   onResultsChange: (results: ApplicantResult[]) => void;
+  correctionRules: CorrectionRule[];
+  onCorrectionRule: (rule: CorrectionRule) => void;
 }
 
 const matchStyles: Record<string, string> = {
@@ -463,6 +466,8 @@ export function ResultsDashboard({
   globalErrors,
   onReset,
   onResultsChange,
+  correctionRules,
+  onCorrectionRule,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -505,18 +510,75 @@ export function ResultsDashboard({
     [results, onResultsChange]
   );
 
+  // Background call to analyze an override and generate a correction rule
+  const analyzeOverride = useCallback(
+    async (
+      type: "relevance" | "expectation",
+      reqId: string,
+      candidateName: string,
+      original: string,
+      corrected: string,
+      roleOrExpectation: string,
+      evidence?: string
+    ) => {
+      try {
+        const res = await fetch("/api/screen/analyze-override", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type,
+            reqId,
+            context: {
+              jobRequirements: "", // The AI will work from the override context
+              candidateName,
+              original,
+              corrected,
+              roleOrExpectation,
+              evidence,
+            },
+          }),
+        });
+        const data = await res.json();
+        const rule: CorrectionRule = {
+          type,
+          reqId,
+          original,
+          corrected,
+          lesson: data.lesson || "Override recorded.",
+          createdAt: new Date().toISOString(),
+        };
+        onCorrectionRule(rule);
+      } catch {
+        // Non-fatal: the override still takes effect even if analysis fails
+      }
+    },
+    [onCorrectionRule]
+  );
+
   const handleToggleRelevance = useCallback(
     (resultIndex: number, roleIndex: number) => {
       const result = { ...results[resultIndex] };
       const roles = [...result.roleRelevance];
       const role = { ...roles[roleIndex] };
+      const originalRelevant = role.isRelevant;
       role.isRelevant = !role.isRelevant;
       role.manualOverride = true;
       roles[roleIndex] = role;
       result.roleRelevance = roles;
       recalculateAndUpdate(resultIndex, result);
+
+      // Fire background analysis
+      analyzeOverride(
+        "relevance",
+        result.reqId,
+        result.candidateName,
+        originalRelevant ? "Relevant" : "Not Relevant",
+        role.isRelevant ? "Relevant" : "Not Relevant",
+        `${role.title} at ${role.employer}`,
+        role.reason
+      );
     },
-    [results, recalculateAndUpdate]
+    [results, recalculateAndUpdate, analyzeOverride]
   );
 
   const handleChangeExpectationStatus = useCallback(
@@ -524,13 +586,25 @@ export function ResultsDashboard({
       const result = { ...results[resultIndex] };
       const expectations = [...result.expectations];
       const exp = { ...expectations[expIndex] };
+      const originalStatus = exp.status;
       exp.status = newStatus;
       exp.manualOverride = true;
       expectations[expIndex] = exp;
       result.expectations = expectations;
       recalculateAndUpdate(resultIndex, result);
+
+      // Fire background analysis
+      analyzeOverride(
+        "expectation",
+        result.reqId,
+        result.candidateName,
+        originalStatus,
+        newStatus,
+        exp.expectation,
+        exp.evidence
+      );
     },
-    [results, recalculateAndUpdate]
+    [results, recalculateAndUpdate, analyzeOverride]
   );
   const [sortKey, setSortKey] = useState<SortKey>("relevantExp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -968,6 +1042,17 @@ export function ResultsDashboard({
           </div>
         )}
       </div>
+
+      {/* Correction Rules Indicator */}
+      {correctionRules.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5">
+          <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+          <span className="text-xs text-blue-700">
+            <strong>{correctionRules.length}</strong> correction rule{correctionRules.length !== 1 ? "s" : ""} learned from your overrides.
+            {" "}Re-screening will apply these corrections to avoid repeating the same mistakes.
+          </span>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

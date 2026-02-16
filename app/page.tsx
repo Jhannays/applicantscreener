@@ -29,6 +29,7 @@ const initialState: ScreeningState = {
   currentFile: "",
   currentStep: "",
   activityLog: [],
+  correctionRules: [],
 };
 
 export default function Home() {
@@ -92,6 +93,11 @@ export default function Home() {
       // If CSV requisition data exists, attach it as JSON
       if (state.requisitionCSV.length > 0) {
         formData.append("requisitionCSV", JSON.stringify(state.requisitionCSV));
+      }
+
+      // If correction rules exist from prior overrides, attach them
+      if (state.correctionRules.length > 0) {
+        formData.append("correctionRules", JSON.stringify(state.correctionRules));
       }
 
       const response = await fetch("/api/screen", {
@@ -247,7 +253,11 @@ export default function Home() {
   }, [state.jobFiles, state.resumeFiles, state.requisitionCSV]);
 
   const handleReset = useCallback(() => {
-    setState(initialState);
+    // Preserve correction rules so re-screening benefits from learned overrides
+    setState((prev) => ({
+      ...initialState,
+      correctionRules: prev.correctionRules,
+    }));
   }, []);
 
   const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
@@ -306,6 +316,14 @@ export default function Home() {
                 gap analysis, and evaluate each resume against job expectations.
               </p>
             </div>
+
+            {state.correctionRules.length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5">
+                <span className="text-xs text-blue-700">
+                  <strong>{state.correctionRules.length}</strong> correction rule{state.correctionRules.length !== 1 ? "s" : ""} from prior overrides will be applied to this screening batch.
+                </span>
+              </div>
+            )}
 
             {state.status === "error" && state.globalErrors.length > 0 && (
               <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
@@ -442,6 +460,13 @@ export default function Home() {
               onReset={handleReset}
               onResultsChange={(newResults) =>
                 setState((prev) => ({ ...prev, results: newResults }))
+              }
+              correctionRules={state.correctionRules}
+              onCorrectionRule={(rule) =>
+                setState((prev) => ({
+                  ...prev,
+                  correctionRules: [...prev.correctionRules, rule],
+                }))
               }
             />
           </div>

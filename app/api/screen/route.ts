@@ -133,7 +133,8 @@ ${resumeText}`,
 
 async function evaluateRoleRelevance(
   workExperience: WorkExperience[],
-  jobRequirements: string
+  jobRequirements: string,
+  correctionRulesForRelevance: string = ""
 ): Promise<
   { employer: string; title: string; isRelevant: boolean; reason: string }[]
 > {
@@ -159,7 +160,7 @@ STRICT RULES:
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
 - "Relevant" means the daily duties align with what the job posting explicitly describes.
 - Do NOT reward or penalize based on inferred requirements -- only what the posting states.
-
+${correctionRulesForRelevance}
 JOB REQUIREMENTS:
 ${jobRequirements}
 
@@ -335,7 +336,8 @@ function buildStructuredRequirements(
 async function evaluateExpectationsStructured(
   resumeText: string,
   structuredReqs: { category: "minimum" | "preferred"; text: string }[],
-  jobQualificationsText: string
+  jobQualificationsText: string,
+  correctionRulesForExpectations: string = ""
 ): Promise<ExpectationCheck[]> {
   const reqList = structuredReqs
     .map(
@@ -357,7 +359,7 @@ ${reqList}
 
 ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
 ${jobQualificationsText}
-
+${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
 
@@ -380,7 +382,8 @@ IMPORTANT:
 
 async function evaluateExpectations(
   resumeText: string,
-  jobRequirements: string
+  jobRequirements: string,
+  correctionRulesForExpectations: string = ""
 ): Promise<ExpectationCheck[]> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
@@ -397,7 +400,7 @@ CRITICAL RULES:
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
-
+${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
 
@@ -617,6 +620,41 @@ export async function POST(req: Request) {
       );
     }
 
+    // Parse optional correction rules from previous overrides
+    let correctionRulesText = "";
+    const correctionRulesStr = formData.get("correctionRules") as string | null;
+    if (correctionRulesStr) {
+      try {
+        const rules = JSON.parse(correctionRulesStr) as {
+          type: string;
+          reqId: string;
+          original: string;
+          corrected: string;
+          lesson: string;
+        }[];
+        if (rules.length > 0) {
+          const relevanceRules = rules.filter((r) => r.type === "relevance");
+          const expectationRules = rules.filter((r) => r.type === "expectation");
+          let rulesBlock = "";
+          if (relevanceRules.length > 0) {
+            rulesBlock += "\nRELEVANCE CORRECTION RULES (from prior human reviews -- you MUST follow these):\n";
+            for (const rule of relevanceRules) {
+              rulesBlock += `- ${rule.lesson}\n`;
+            }
+          }
+          if (expectationRules.length > 0) {
+            rulesBlock += "\nREQUIREMENT STATUS CORRECTION RULES (from prior human reviews -- you MUST follow these):\n";
+            for (const rule of expectationRules) {
+              rulesBlock += `- ${rule.lesson}\n`;
+            }
+          }
+          correctionRulesText = rulesBlock;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     // Parse optional requisition CSV data
     const csvMap = new Map<string, RequisitionCSVRow>();
     const requisitionCSVStr = formData.get("requisitionCSV") as string | null;
@@ -788,14 +826,15 @@ export async function POST(req: Request) {
               : null;
 
             const [relevanceResults, expectations] = await Promise.all([
-              evaluateRoleRelevance(parsed.workExperience, jobContent),
+              evaluateRoleRelevance(parsed.workExperience, jobContent, correctionRulesText),
               structuredReqs && structuredReqs.length > 0
                 ? evaluateExpectationsStructured(
                     resumeText,
                     structuredReqs,
-                    csvRow?.jobQualifications || jobContent
+                    csvRow?.jobQualifications || jobContent,
+                    correctionRulesText
                   )
-                : evaluateExpectations(resumeText, jobContent),
+                : evaluateExpectations(resumeText, jobContent, correctionRulesText),
             ]);
 
             // 4. Compute experience (deterministic, instant)

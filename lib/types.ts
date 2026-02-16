@@ -158,6 +158,25 @@ export interface ScreeningError {
 }
 
 // ──────────────────────────────────────────────
+// Correction Rules (human-in-the-loop learning)
+// ──────────────────────────────────────────────
+
+export interface CorrectionRule {
+  /** Which type of override this was */
+  type: "relevance" | "expectation";
+  /** The requisition this correction applies to */
+  reqId: string;
+  /** What the AI originally determined */
+  original: string;
+  /** What the human corrected it to */
+  corrected: string;
+  /** AI-generated explanation of the mistake and the correct interpretation */
+  lesson: string;
+  /** Timestamp */
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────
 // App State
 // ──────────────────────────────────────────────
 
@@ -181,4 +200,6 @@ export interface ScreeningState {
   currentFile: string;
   currentStep: string;
   activityLog: ActivityLogEntry[];
+  /** Accumulated correction rules from human overrides -- fed back into AI prompts */
+  correctionRules: CorrectionRule[];
 }
