@@ -10,6 +10,7 @@ import type {
   ExpectationCheck,
   ParsedResume,
   WorkExperience,
+  RequisitionCSVRow,
 } from "@/lib/types";
 import {
   parseMonthYear,
@@ -188,7 +189,194 @@ For each role you MUST return:
   );
 }
 
-// ─── AI: Expectations check ───────────────────────────────
+// ─── Build structured requirements from CSV row ──────────
+
+function buildStructuredRequirements(
+  csvRow: RequisitionCSVRow
+): { category: "minimum" | "preferred"; text: string }[] {
+  const reqs: { category: "minimum" | "preferred"; text: string }[] = [];
+
+  // Minimum experience
+  if (csvRow.minYearsExperience) {
+    reqs.push({
+      category: "minimum",
+      text: `Minimum experience: ${csvRow.minYearsExperience}`,
+    });
+  }
+
+  // Preferred experience years
+  if (csvRow.preferredYearsExperience) {
+    reqs.push({
+      category: "preferred",
+      text: `Preferred experience: ${csvRow.preferredYearsExperience}`,
+    });
+  }
+
+  // Required certifications (may be comma-separated list)
+  if (csvRow.certificationsRequired) {
+    for (const cert of csvRow.certificationsRequired.split(",")) {
+      const trimmed = cert.trim();
+      if (trimmed) {
+        reqs.push({
+          category: "minimum",
+          text: `Required certification/license: ${trimmed}`,
+        });
+      }
+    }
+  }
+
+  // Certification needed (alternate required certs column)
+  if (csvRow.certificationNeeded) {
+    for (const cert of csvRow.certificationNeeded.split(",")) {
+      const trimmed = cert.trim();
+      if (trimmed) {
+        // Avoid duplicates with certificationsRequired
+        const alreadyHas = reqs.some(
+          (r) =>
+            r.category === "minimum" &&
+            r.text.toLowerCase().includes(trimmed.toLowerCase())
+        );
+        if (!alreadyHas) {
+          reqs.push({
+            category: "minimum",
+            text: `Required certification: ${trimmed}`,
+          });
+        }
+      }
+    }
+  }
+
+  // Preferred certifications (two columns can have these)
+  const prefCerts = new Set<string>();
+  if (csvRow.certificationsPreferred) {
+    for (const cert of csvRow.certificationsPreferred.split(",")) {
+      const trimmed = cert.trim();
+      if (trimmed) prefCerts.add(trimmed);
+    }
+  }
+  if (csvRow.preferredCertifications) {
+    for (const cert of csvRow.preferredCertifications.split(",")) {
+      const trimmed = cert.trim();
+      if (trimmed) prefCerts.add(trimmed);
+    }
+  }
+  for (const cert of prefCerts) {
+    reqs.push({
+      category: "preferred",
+      text: `Preferred certification: ${cert}`,
+    });
+  }
+
+  // Education needed (required)
+  if (csvRow.educationNeeded) {
+    for (const edu of csvRow.educationNeeded.split(",")) {
+      const trimmed = edu.trim();
+      if (trimmed) {
+        reqs.push({
+          category: "minimum",
+          text: `Required education: ${trimmed}`,
+        });
+      }
+    }
+  }
+
+  // Degree type preferred
+  if (csvRow.degreeTypePreferred) {
+    reqs.push({
+      category: "preferred",
+      text: `Preferred degree: ${csvRow.degreeTypePreferred}`,
+    });
+  }
+
+  // Experience needed (required experience details)
+  if (csvRow.experienceNeeded) {
+    for (const exp of csvRow.experienceNeeded.split(",")) {
+      const trimmed = exp.trim();
+      if (trimmed) {
+        reqs.push({
+          category: "minimum",
+          text: `Required experience: ${trimmed}`,
+        });
+      }
+    }
+  }
+
+  // Preferred experience (Dataverse)
+  if (csvRow.experienceDataverse) {
+    for (const exp of csvRow.experienceDataverse.split(",")) {
+      const trimmed = exp.trim();
+      if (trimmed) {
+        reqs.push({
+          category: "preferred",
+          text: `Preferred experience: ${trimmed}`,
+        });
+      }
+    }
+  }
+
+  // Qualifications column (treat as minimum)
+  if (csvRow.qualifications) {
+    for (const qual of csvRow.qualifications.split(",")) {
+      const trimmed = qual.trim();
+      if (trimmed) {
+        reqs.push({
+          category: "minimum",
+          text: `Required qualification: ${trimmed}`,
+        });
+      }
+    }
+  }
+
+  return reqs;
+}
+
+// ─── AI: Expectations check (structured CSV mode) ────────
+
+async function evaluateExpectationsStructured(
+  resumeText: string,
+  structuredReqs: { category: "minimum" | "preferred"; text: string }[],
+  jobQualificationsText: string
+): Promise<ExpectationCheck[]> {
+  const reqList = structuredReqs
+    .map(
+      (r, i) =>
+        `${i + 1}. [${r.category.toUpperCase()}] ${r.text}`
+    )
+    .join("\n");
+
+  const { output } = await generateText({
+    model: "openai/gpt-4o-mini",
+    output: Output.object({ schema: expectationsSchema }),
+    prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
+
+The following requirements have been pre-categorized from the employer's structured requisition data.
+Each requirement is labeled as either [MINIMUM] (required/must-have) or [PREFERRED] (nice-to-have).
+
+STRUCTURED REQUIREMENTS (use these EXACT requirements and categories -- do NOT add, remove, or re-categorize):
+${reqList}
+
+ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
+${jobQualificationsText}
+
+RESUME TEXT:
+${resumeText}
+
+For EACH numbered requirement above, evaluate the resume:
+- "Met" = clear, direct evidence in the resume
+- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
+- "Not Evident" = no evidence found in the resume
+
+IMPORTANT:
+- Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred").
+- For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
+- For "Partially Met": Describe what the resume shows AND what gap remains.
+- For "Not Evident": Leave evidence as empty string.
+- Return exactly ${structuredReqs.length} checks, one per requirement.`,
+  });
+  return (output as { checks: ExpectationCheck[] })?.checks || [];
+}
+
+// ─── AI: Expectations check (free-text fallback) ─────────
 
 async function evaluateExpectations(
   resumeText: string,
@@ -429,6 +617,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // Parse optional requisition CSV data
+    const csvMap = new Map<string, RequisitionCSVRow>();
+    const requisitionCSVStr = formData.get("requisitionCSV") as string | null;
+    if (requisitionCSVStr) {
+      try {
+        const csvRows = JSON.parse(requisitionCSVStr) as RequisitionCSVRow[];
+        for (const row of csvRows) {
+          if (row.requisitionNumber) {
+            csvMap.set(row.requisitionNumber, row);
+          }
+        }
+      } catch {
+        // Non-fatal: continue without CSV data
+      }
+    }
+
     // Read job files into a map
     const jobMap = new Map<string, string>();
     for (const job of manifest.jobs) {
@@ -444,6 +648,7 @@ export async function POST(req: Request) {
       jobContent: string;
       fileName: string;
       file: File;
+      csvRow?: RequisitionCSVRow;
     }[] = [];
     const skippedErrors: string[] = [];
 
@@ -462,6 +667,7 @@ export async function POST(req: Request) {
         jobContent,
         fileName: resume.fileName,
         file,
+        csvRow: csvMap.get(resume.reqId),
       });
     }
 
@@ -494,8 +700,9 @@ export async function POST(req: Request) {
           jobContent: string;
           fileName: string;
           file: File;
+          csvRow?: RequisitionCSVRow;
         }) {
-          const { reqId, jobContent, fileName, file } = item;
+          const { reqId, jobContent, fileName, file, csvRow } = item;
 
           // Each resume has 3 sub-steps for smoother progress
           const baseIndex = matchedPairs.indexOf(item);
@@ -558,9 +765,20 @@ export async function POST(req: Request) {
             });
             sendSubProgress(2);
 
+            // Build structured requirements from CSV if available
+            const structuredReqs = csvRow
+              ? buildStructuredRequirements(csvRow)
+              : null;
+
             const [relevanceResults, expectations] = await Promise.all([
               evaluateRoleRelevance(parsed.workExperience, jobContent),
-              evaluateExpectations(resumeText, jobContent),
+              structuredReqs && structuredReqs.length > 0
+                ? evaluateExpectationsStructured(
+                    resumeText,
+                    structuredReqs,
+                    csvRow?.jobQualifications || jobContent
+                  )
+                : evaluateExpectations(resumeText, jobContent),
             ]);
 
             // 4. Compute experience (deterministic, instant)

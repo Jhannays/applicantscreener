@@ -1,12 +1,15 @@
 "use client";
 
-import { Upload, FileText, X, FolderOpen } from "lucide-react";
+import { Upload, FileText, X, FolderOpen, Table2, AlertTriangle } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import type { JobFile } from "@/lib/types";
+import type { JobFile, RequisitionCSVRow } from "@/lib/types";
+import { parseRequisitionCSV } from "@/lib/parse-requisition-csv";
 
 interface JobRequirementsInputProps {
   files: JobFile[];
   onFilesChange: (files: JobFile[]) => void;
+  requisitionCSV: RequisitionCSVRow[];
+  onRequisitionCSVChange: (rows: RequisitionCSVRow[]) => void;
 }
 
 function extractReqId(fileName: string): string | null {
@@ -17,9 +20,15 @@ function extractReqId(fileName: string): string | null {
 export function JobRequirementsInput({
   files,
   onFilesChange,
+  requisitionCSV,
+  onRequisitionCSVChange,
 }: JobRequirementsInputProps) {
   const [dragActive, setDragActive] = useState(false);
+  const [csvDragActive, setCsvDragActive] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const processFiles = useCallback(
     async (fileList: FileList) => {
@@ -40,6 +49,29 @@ export function JobRequirementsInput({
     [files, onFilesChange]
   );
 
+  const processCSV = useCallback(
+    async (file: File) => {
+      setCsvError(null);
+      try {
+        const text = await file.text();
+        const rows = parseRequisitionCSV(text);
+        if (rows.length === 0) {
+          setCsvError(
+            "No valid requisition rows found. Ensure the CSV has a Requisition.Number column and data rows after the 2-line header."
+          );
+          return;
+        }
+        setCsvFileName(file.name);
+        onRequisitionCSVChange(rows);
+      } catch (err) {
+        setCsvError(
+          `Failed to parse CSV: ${err instanceof Error ? err.message : "unknown error"}`
+        );
+      }
+    },
+    [onRequisitionCSVChange]
+  );
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -49,6 +81,16 @@ export function JobRequirementsInput({
     [processFiles]
   );
 
+  const handleCSVDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setCsvDragActive(false);
+      const fileList = e.dataTransfer.files;
+      if (fileList.length > 0) processCSV(fileList[0]);
+    },
+    [processCSV]
+  );
+
   const removeFile = useCallback(
     (reqId: string) => {
       onFilesChange(files.filter((f) => f.reqId !== reqId));
@@ -56,8 +98,17 @@ export function JobRequirementsInput({
     [files, onFilesChange]
   );
 
+  const removeCSV = useCallback(() => {
+    onRequisitionCSVChange([]);
+    setCsvFileName(null);
+    setCsvError(null);
+  }, [onRequisitionCSVChange]);
+
+  // Derive unique req numbers from CSV for display
+  const csvReqNumbers = requisitionCSV.map((r) => r.requisitionNumber);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <h3 className="text-sm font-semibold text-foreground">
           Job Requirements
@@ -67,14 +118,11 @@ export function JobRequirementsInput({
           <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
             ./jobs/
           </code>{" "}
-          folder. Each filename must start with the requisition number (e.g.{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-[11px] font-mono">
-            25004678_job_requirements.txt
-          </code>
-          ).
+          folder, and optionally a requisition CSV for structured screening data.
         </p>
       </div>
 
+      {/* ── Job .txt files drop zone ── */}
       <div
         onDrop={handleDrop}
         onDragOver={(e) => {
@@ -83,7 +131,7 @@ export function JobRequirementsInput({
         }}
         onDragLeave={() => setDragActive(false)}
         onClick={() => fileInputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 transition-colors ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
           dragActive
             ? "border-primary bg-primary/5"
             : "border-border hover:border-primary/50"
@@ -95,7 +143,7 @@ export function JobRequirementsInput({
         }}
         aria-label="Upload job requirement files"
       >
-        <FolderOpen className="mb-2 h-7 w-7 text-muted-foreground" />
+        <FolderOpen className="mb-2 h-6 w-6 text-muted-foreground" />
         <p className="text-sm font-medium text-foreground">
           Drop job requirement files here
         </p>
@@ -150,6 +198,102 @@ export function JobRequirementsInput({
           </div>
         </div>
       )}
+
+      {/* ── Requisition CSV upload zone ── */}
+      <div className="border-t border-border pt-4">
+        <div className="mb-2">
+          <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <Table2 className="h-3.5 w-3.5" />
+            Requisition CSV
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </h4>
+          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
+            Upload a structured CSV export from Workday/HRIS with columns like
+            Min/Preferred Years, Certifications, Education, etc. This provides
+            more precise requirement categorization.
+          </p>
+        </div>
+
+        {requisitionCSV.length === 0 ? (
+          <div
+            onDrop={handleCSVDrop}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setCsvDragActive(true);
+            }}
+            onDragLeave={() => setCsvDragActive(false)}
+            onClick={() => csvInputRef.current?.click()}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-5 transition-colors ${
+              csvDragActive
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50"
+            }`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ")
+                csvInputRef.current?.click();
+            }}
+            aria-label="Upload requisition CSV"
+          >
+            <Upload className="mb-1.5 h-5 w-5 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              Drop requisition CSV here
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              .csv file with 2-line header
+            </p>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) processCSV(e.target.files[0]);
+                e.target.value = "";
+              }}
+            />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Table2 className="h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {csvFileName || "requisition.csv"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {requisitionCSV.length} requisition
+                    {requisitionCSV.length !== 1 ? "s" : ""} loaded
+                    <span className="ml-1.5 text-foreground/70">
+                      (REQs: {csvReqNumbers.slice(0, 5).join(", ")}
+                      {csvReqNumbers.length > 5
+                        ? `, +${csvReqNumbers.length - 5} more`
+                        : ""}
+                      )
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={removeCSV}
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Remove requisition CSV"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {csvError && (
+          <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-xs text-amber-700">{csvError}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -518,11 +518,13 @@ export function ResultsDashboard({
       "Candidate Name",
       "Education",
       "Skills",
-      "Years of Experience",
+      "Relevant Years of Experience",
       "Certifications",
+      "Overall Match",
       "Gap Present? (Y/N)",
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
+      "Relevance Reasoning",
     ];
 
     const rows = results.map((r) => {
@@ -531,10 +533,20 @@ export function ResultsDashboard({
         .join("; ");
       const skillsStr = r.skills.join("; ");
       const certsStr = r.certifications.join("; ");
-      const yoeStr = `${r.relevantYears} years ${r.relevantMonths} months relevant / ${r.totalYears} years ${r.totalMonths} months total`;
+      const yoeStr = `${r.relevantYears} years ${r.relevantMonths} months`;
       const gapPresent = r.gapAnalysis.gapCount > 0 ? "Y" : "N";
       const nonRelevant = r.nonRelevantExperienceCounted ? "Y" : "N";
       const edgeCase = r.isEdgeCase ? "Y" : "N";
+
+      // Build relevance reasoning: per-role breakdown
+      const reasoningParts = r.roleRelevance.map((role) => {
+        const yrs = Math.floor(role.durationMonths / 12);
+        const mos = role.durationMonths % 12;
+        const durationStr = yrs > 0 ? `${yrs}y ${mos}m` : `${mos}m`;
+        const relevantTag = role.isRelevant ? "RELEVANT" : "NOT RELEVANT";
+        return `${role.title} at ${role.employer} (${durationStr}, ${relevantTag}): ${role.reason}`;
+      });
+      const reasoningStr = reasoningParts.join("; ");
 
       return [
         csvEscape(r.reqId),
@@ -543,9 +555,11 @@ export function ResultsDashboard({
         csvEscape(skillsStr || "N/A"),
         csvEscape(yoeStr),
         csvEscape(certsStr || "N/A"),
+        csvEscape(r.overallMatch),
         gapPresent,
         nonRelevant,
         edgeCase,
+        csvEscape(reasoningStr || "N/A"),
       ].join(",");
     });
 
@@ -559,6 +573,8 @@ export function ResultsDashboard({
             csvEscape(e.reqId),
             csvEscape(e.fileName),
             csvEscape(`ERROR: ${e.error}`),
+            "",
+            "",
             "",
             "",
             "",

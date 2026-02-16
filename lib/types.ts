@@ -1,4 +1,26 @@
 // ──────────────────────────────────────────────
+// Requisition CSV Row (structured import)
+// ──────────────────────────────────────────────
+
+/** One row from a Workday/HRIS requisition CSV export. Blank = no posted requirement. */
+export interface RequisitionCSVRow {
+  requisitionNumber: string;
+  preferredYearsExperience?: string;
+  minYearsExperience?: string;
+  jobQualifications?: string;
+  certificationsPreferred?: string;
+  certificationsRequired?: string;
+  degreeTypePreferred?: string;
+  experienceDataverse?: string;
+  experienceNeeded?: string;
+  reqIdentifier?: string;
+  qualifications?: string;
+  preferredCertifications?: string;
+  certificationNeeded?: string;
+  educationNeeded?: string;
+}
+
+// ──────────────────────────────────────────────
 // Upload / Input Types
 // ──────────────────────────────────────────────
 
@@ -145,6 +167,8 @@ export interface ScreeningState {
   status: "upload" | "screening" | "complete" | "error";
   jobFiles: JobFile[];
   resumeFiles: ResumeFile[];
+  /** Optional structured requisition data from CSV upload */
+  requisitionCSV: RequisitionCSVRow[];
   results: ApplicantResult[];
   errors: ScreeningError[];
   globalErrors: string[];

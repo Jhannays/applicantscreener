@@ -9,6 +9,7 @@ import { ResultsDashboard } from "@/components/results-dashboard";
 import type {
   JobFile,
   ResumeFile,
+  RequisitionCSVRow,
   ApplicantResult,
   ScreeningState,
   ScreeningError,
@@ -19,6 +20,7 @@ const initialState: ScreeningState = {
   status: "upload",
   jobFiles: [],
   resumeFiles: [],
+  requisitionCSV: [],
   results: [],
   errors: [],
   globalErrors: [],
@@ -85,6 +87,11 @@ export default function Home() {
 
       // Add manifest as JSON
       formData.append("manifest", JSON.stringify(manifest));
+
+      // If CSV requisition data exists, attach it as JSON
+      if (state.requisitionCSV.length > 0) {
+        formData.append("requisitionCSV", JSON.stringify(state.requisitionCSV));
+      }
 
       const response = await fetch("/api/screen", {
         method: "POST",
@@ -236,7 +243,7 @@ export default function Home() {
         ],
       }));
     }
-  }, [state.jobFiles, state.resumeFiles]);
+  }, [state.jobFiles, state.resumeFiles, state.requisitionCSV]);
 
   const handleReset = useCallback(() => {
     setState(initialState);
@@ -318,6 +325,10 @@ export default function Home() {
                   files={state.jobFiles}
                   onFilesChange={(files: JobFile[]) =>
                     setState((prev) => ({ ...prev, jobFiles: files }))
+                  }
+                  requisitionCSV={state.requisitionCSV}
+                  onRequisitionCSVChange={(rows: RequisitionCSVRow[]) =>
+                    setState((prev) => ({ ...prev, requisitionCSV: rows }))
                   }
                 />
               </div>
