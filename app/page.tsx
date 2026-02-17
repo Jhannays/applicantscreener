@@ -34,6 +34,7 @@ const initialState: ScreeningState = {
 
 export default function Home() {
   const [state, setState] = useState<ScreeningState>(initialState);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const handleScreen = useCallback(async () => {
     const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
@@ -260,6 +261,152 @@ export default function Home() {
     }));
   }, []);
 
+  const handleRetry = useCallback(
+    async (failedErrors: ScreeningError[]) => {
+      if (failedErrors.length === 0) return;
+      setIsRetrying(true);
+
+      // Remove the retried errors from the error list immediately
+      const retryKeys = new Set(
+        failedErrors.map((e) => `${e.reqId}::${e.fileName}`)
+      );
+      setState((prev) => ({
+        ...prev,
+        errors: prev.errors.filter(
+          (e) => !retryKeys.has(`${e.reqId}::${e.fileName}`)
+        ),
+      }));
+
+      try {
+        const formData = new FormData();
+        const manifest = {
+          jobs: [] as { fieldName: string; reqId: string; fileName: string }[],
+          resumes: [] as { fieldName: string; reqId: string; fileName: string }[],
+        };
+
+        // Re-attach relevant job files
+        const neededReqIds = new Set(failedErrors.map((e) => e.reqId));
+        let jobIdx = 0;
+        for (const jf of state.jobFiles) {
+          if (neededReqIds.has(jf.reqId)) {
+            const fieldName = `job_${jobIdx++}`;
+            formData.append(fieldName, jf.file, jf.fileName);
+            manifest.jobs.push({ fieldName, reqId: jf.reqId, fileName: jf.fileName });
+          }
+        }
+
+        // Find original File objects for the failed resumes
+        let resumeIdx = 0;
+        for (const err of failedErrors) {
+          const original = state.resumeFiles.find(
+            (rf) => rf.reqId === err.reqId && rf.fileName === err.fileName
+          );
+          if (original) {
+            const fieldName = `resume_${resumeIdx++}`;
+            formData.append(fieldName, original.file, original.fileName);
+            manifest.resumes.push({ fieldName, reqId: original.reqId, fileName: original.fileName });
+          }
+        }
+
+        if (manifest.resumes.length === 0) {
+          // Could not find original files -- put errors back
+          setState((prev) => ({
+            ...prev,
+            errors: [...prev.errors, ...failedErrors],
+            globalErrors: [...prev.globalErrors, "Retry failed: original resume files not found. Please start a new screening."],
+          }));
+          setIsRetrying(false);
+          return;
+        }
+
+        formData.append("manifest", JSON.stringify(manifest));
+
+        if (state.requisitionCSV.length > 0) {
+          formData.append("requisitionCSV", JSON.stringify(state.requisitionCSV));
+        }
+        if (state.correctionRules.length > 0) {
+          formData.append("correctionRules", JSON.stringify(state.correctionRules));
+        }
+
+        const response = await fetch("/api/screen", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Server responded with status ${response.status}`;
+          try {
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } else {
+              const text = await response.text();
+              errorMessage = text || errorMessage;
+            }
+          } catch {
+            // use status message
+          }
+          throw new Error(errorMessage);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response stream");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const message = JSON.parse(line);
+
+              if (message.type === "result") {
+                setState((prev) => ({
+                  ...prev,
+                  results: [...prev.results, message.data],
+                }));
+              } else if (message.type === "error") {
+                // Still failed on retry -- put it back in errors
+                setState((prev) => ({
+                  ...prev,
+                  errors: [
+                    ...prev.errors,
+                    { reqId: message.reqId, fileName: message.fileName, error: message.error },
+                  ],
+                }));
+              }
+              // Ignore info/progress/step/done for retries -- they apply to the sub-batch
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+      } catch (err) {
+        // Put all retried errors back and show the global error
+        setState((prev) => ({
+          ...prev,
+          errors: [...prev.errors, ...failedErrors],
+          globalErrors: [
+            ...prev.globalErrors,
+            `Retry failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+          ],
+        }));
+      } finally {
+        setIsRetrying(false);
+      }
+    },
+    [state.jobFiles, state.resumeFiles, state.requisitionCSV, state.correctionRules]
+  );
+
   const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
   const canScreen = hasJobSource && state.resumeFiles.length > 0;
 
@@ -468,6 +615,8 @@ export default function Home() {
                   correctionRules: [...prev.correctionRules, rule],
                 }))
               }
+              onRetry={handleRetry}
+              isRetrying={isRetrying}
             />
           </div>
         )}

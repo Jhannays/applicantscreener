@@ -19,8 +19,10 @@ import {
   Wrench,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
+  Play,
+  Loader2,
 } from "lucide-react";
-import { RefreshCw } from "lucide-react";
 import type {
   ApplicantResult,
   ExpectationCheck,
@@ -36,6 +38,10 @@ interface ResultsDashboardProps {
   onResultsChange: (results: ApplicantResult[]) => void;
   correctionRules: CorrectionRule[];
   onCorrectionRule: (rule: CorrectionRule) => void;
+  /** Retry specific failed resumes without going back to upload */
+  onRetry: (failedErrors: ScreeningError[]) => void;
+  /** Whether a retry is currently in progress */
+  isRetrying: boolean;
 }
 
 const matchStyles: Record<string, string> = {
@@ -468,8 +474,11 @@ export function ResultsDashboard({
   onResultsChange,
   correctionRules,
   onCorrectionRule,
+  onRetry,
+  isRetrying,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedRetries, setSelectedRetries] = useState<Set<number>>(new Set());
 
   // Recalculate derived fields after a toggle and propagate up
   const recalculateAndUpdate = useCallback(
@@ -924,15 +933,22 @@ export function ResultsDashboard({
                 </span>
               )}
             </div>
-            {showErrorsExpanded ? (
-              <ChevronUp className="h-4 w-4 text-destructive/70" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-destructive/70" />
-            )}
+            <div className="flex items-center gap-2">
+              {errors.length > 0 && !isRetrying && (
+                <span className="text-xs font-medium text-destructive/60">
+                  Select to retry
+                </span>
+              )}
+              {showErrorsExpanded ? (
+                <ChevronUp className="h-4 w-4 text-destructive/70" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-destructive/70" />
+              )}
+            </div>
           </button>
 
           {showErrorsExpanded && (
-            <div className="border-t border-destructive/20 px-4 py-3">
+            <div className="border-t border-destructive/20 px-4 py-3 space-y-3">
               {globalErrors.length > 0 && (
                 <div className="mb-3">
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-destructive/60">
@@ -947,41 +963,155 @@ export function ResultsDashboard({
               )}
 
               {errors.length > 0 && (
-                <div className="overflow-x-auto rounded-md border border-destructive/20">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-destructive/20 bg-destructive/5">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
-                          REQ
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
-                          File
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
-                          Error
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {errors.map((e, i) => (
-                        <tr
-                          key={i}
-                          className="border-b border-destructive/10 last:border-0"
+                <>
+                  {/* Retry controls */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs text-destructive/70 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedRetries.size === errors.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedRetries(new Set(errors.map((_, i) => i)));
+                            } else {
+                              setSelectedRetries(new Set());
+                            }
+                          }}
+                          className="rounded border-destructive/30"
+                          disabled={isRetrying}
+                        />
+                        Select all
+                      </label>
+                      {selectedRetries.size > 0 && (
+                        <span className="text-xs text-destructive/60">
+                          {selectedRetries.size} selected
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedRetries.size > 0 && (
+                        <button
+                          onClick={() => {
+                            const toRetry = errors.filter((_, i) => selectedRetries.has(i));
+                            setSelectedRetries(new Set());
+                            onRetry(toRetry);
+                          }}
+                          disabled={isRetrying}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                         >
-                          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-destructive/80">
-                            {e.reqId}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-destructive/80">
-                            {e.fileName}
-                          </td>
-                          <td className="max-w-md px-3 py-2 text-xs text-destructive/70">
-                            {e.error}
-                          </td>
+                          {isRetrying ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
+                          Retry {selectedRetries.size} Resume{selectedRetries.size !== 1 ? "s" : ""}
+                        </button>
+                      )}
+                      {errors.length > 1 && (
+                        <button
+                          onClick={() => {
+                            setSelectedRetries(new Set());
+                            onRetry(errors);
+                          }}
+                          disabled={isRetrying}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          {isRetrying ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3" />
+                          )}
+                          Retry All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Retrying indicator */}
+                  {isRetrying && (
+                    <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      <span className="text-xs font-medium text-primary">
+                        Retrying failed resumes... Results will be added to the table automatically.
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-md border border-destructive/20">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-destructive/20 bg-destructive/5">
+                          <th className="w-8 px-3 py-2" />
+                          <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                            REQ
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                            File
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-destructive/70">
+                            Error
+                          </th>
+                          <th className="w-20 px-3 py-2 text-right text-xs font-medium text-destructive/70">
+                            Action
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {errors.map((e, i) => (
+                          <tr
+                            key={i}
+                            className="border-b border-destructive/10 last:border-0"
+                          >
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedRetries.has(i)}
+                                onChange={(ev) => {
+                                  const next = new Set(selectedRetries);
+                                  if (ev.target.checked) {
+                                    next.add(i);
+                                  } else {
+                                    next.delete(i);
+                                  }
+                                  setSelectedRetries(next);
+                                }}
+                                className="rounded border-destructive/30"
+                                disabled={isRetrying}
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-destructive/80">
+                              {e.reqId}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-destructive/80">
+                              {e.fileName}
+                            </td>
+                            <td className="max-w-md px-3 py-2 text-xs text-destructive/70">
+                              {e.error}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                onClick={() => {
+                                  onRetry([e]);
+                                }}
+                                disabled={isRetrying}
+                                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                                title={`Retry ${e.fileName}`}
+                              >
+                                {isRetrying ? (
+                                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                ) : (
+                                  <Play className="h-2.5 w-2.5" />
+                                )}
+                                Retry
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
