@@ -480,32 +480,45 @@ export function ResultsDashboard({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedRetries, setSelectedRetries] = useState<Set<number>>(new Set());
 
-  // ─── Anonymized name mapping ────────────────────────────
-  // Build a stable mapping from real candidate names to anonymized labels.
-  // Uses "Candidate A", "Candidate B", ..., "Candidate Z", "Candidate AA", etc.
-  const nameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const seen: string[] = [];
+  // ─── Anonymization ──────────────────────────────────────
+  // Map real candidate names AND file names to anonymous labels.
+  // No PII is ever shown in the UI, exports, or sent to the AI.
+  const { getDisplayName, getDisplayFile } = useMemo(() => {
+    const nameToLabel = new Map<string, string>();
+    const fileToLabel = new Map<string, string>();
+    let nameCounter = 0;
+    let fileCounter = 0;
+
+    const toLetter = (idx: number) => {
+      let label = "";
+      let n = idx;
+      do {
+        label = String.fromCharCode(65 + (n % 26)) + label;
+        n = Math.floor(n / 26) - 1;
+      } while (n >= 0);
+      return label;
+    };
+
     for (const r of results) {
-      if (!map.has(r.candidateName)) {
-        seen.push(r.candidateName);
-        const idx = seen.length - 1;
-        let label = "";
-        let n = idx;
-        do {
-          label = String.fromCharCode(65 + (n % 26)) + label;
-          n = Math.floor(n / 26) - 1;
-        } while (n >= 0);
-        map.set(r.candidateName, `Candidate ${label}`);
+      if (!nameToLabel.has(r.candidateName)) {
+        nameToLabel.set(r.candidateName, `Candidate ${toLetter(nameCounter++)}`);
+      }
+      if (!fileToLabel.has(r.resumeFile)) {
+        fileToLabel.set(r.resumeFile, `Resume-${toLetter(fileCounter++)}.pdf`);
       }
     }
-    return map;
-  }, [results]);
+    // Also map error file names
+    for (const e of errors) {
+      if (!fileToLabel.has(e.fileName)) {
+        fileToLabel.set(e.fileName, `Resume-${toLetter(fileCounter++)}.pdf`);
+      }
+    }
 
-  const getDisplayName = useCallback(
-    (realName: string) => nameMap.get(realName) || realName,
-    [nameMap]
-  );
+    return {
+      getDisplayName: (real: string) => nameToLabel.get(real) || "Candidate",
+      getDisplayFile: (real: string) => fileToLabel.get(real) || "Resume.pdf",
+    };
+  }, [results, errors]);
 
   // Recalculate derived fields after a toggle and propagate up
   const recalculateAndUpdate = useCallback(
@@ -803,7 +816,7 @@ export function ResultsDashboard({
         rows.push(
           [
             csvEscape(e.reqId),
-            csvEscape(e.fileName),
+            csvEscape(getDisplayFile(e.fileName)),
             csvEscape(`ERROR: ${e.error}`),
             "",
             "",
@@ -829,6 +842,7 @@ export function ResultsDashboard({
     const anonymized = results.map((r) => ({
       ...r,
       candidateName: getDisplayName(r.candidateName),
+      resumeFile: getDisplayFile(r.resumeFile),
     }));
     downloadFile(
       JSON.stringify({ results: anonymized, errors }, null, 2),
@@ -845,7 +859,7 @@ export function ResultsDashboard({
     md += "| REQ ID | Resume | Candidate | Relevant Exp | Total Exp | Gaps | Req Met | Match |\n";
     md += "|--------|--------|-----------|-------------|-----------|------|---------|-------|\n";
     results.forEach((r) => {
-      md += `| ${r.reqId} | ${r.resumeFile} | ${getDisplayName(r.candidateName)} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
+      md += `| ${r.reqId} | ${getDisplayFile(r.resumeFile)} | ${getDisplayName(r.candidateName)} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
     });
 
     if (errors.length > 0) {
@@ -853,7 +867,7 @@ export function ResultsDashboard({
       md += "| REQ ID | File | Error |\n";
       md += "|--------|------|-------|\n";
       errors.forEach((e) => {
-        md += `| ${e.reqId} | ${e.fileName} | ${e.error} |\n`;
+        md += `| ${e.reqId} | ${getDisplayFile(e.fileName)} | ${e.error} |\n`;
       });
     }
 
@@ -861,7 +875,7 @@ export function ResultsDashboard({
 
     results.forEach((r) => {
       md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
-      md += `**File:** ${r.resumeFile}\n\n`;
+      md += `**File:** ${getDisplayFile(r.resumeFile)}\n\n`;
       md += `**Overall Match:** ${r.overallMatch}\n`;
       md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
       md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n\n`;
@@ -1115,7 +1129,7 @@ export function ResultsDashboard({
                               {e.reqId}
                             </td>
                             <td className="px-3 py-2 text-xs text-destructive/80">
-                              {e.fileName}
+                              {getDisplayFile(e.fileName)}
                             </td>
                             <td className="max-w-md px-3 py-2 text-xs text-destructive/70">
                               {e.error}
@@ -1127,7 +1141,7 @@ export function ResultsDashboard({
                                 }}
                                 disabled={isRetrying}
                                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-                                title={`Retry ${e.fileName}`}
+                                title={`Retry ${getDisplayFile(e.fileName)}`}
                               >
                                 {isRetrying ? (
                                   <Loader2 className="h-2.5 w-2.5 animate-spin" />
@@ -1359,7 +1373,7 @@ export function ResultsDashboard({
                             {getDisplayName(result.candidateName)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {result.resumeFile}
+                            {getDisplayFile(result.resumeFile)}
                           </p>
                         </div>
                       </td>

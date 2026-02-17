@@ -163,7 +163,7 @@ export default function Home() {
               activityLog.push({ time: now, message: message.message, type: "step" });
               setState((prev) => ({
                 ...prev,
-                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
+                currentFile: `[REQ ${message.reqId}] Resume ${collectedResults.length + collectedErrors.length + 1}`,
                 currentStep: message.step,
                 activityLog: [...activityLog],
               }));
@@ -174,7 +174,7 @@ export default function Home() {
                 ...prev,
                 progress: fractionalProgress,
                 totalToProcess: message.total,
-                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
+                currentFile: `[REQ ${message.reqId}] Resume ${message.current + 1}`,
               }));
             } else if (message.type === "progress") {
               // Full resume completed
@@ -182,11 +182,11 @@ export default function Home() {
                 ...prev,
                 progress: message.current,
                 totalToProcess: message.total,
-                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
+                currentFile: `[REQ ${message.reqId}] Resume ${message.current}`,
               }));
             } else if (message.type === "result") {
               collectedResults.push(message.data);
-              activityLog.push({ time: now, message: `Completed: ${message.data.candidateName}`, type: "success" });
+              activityLog.push({ time: now, message: `Completed: Candidate ${collectedResults.length}`, type: "success" });
               setState((prev) => ({
                 ...prev,
                 results: [...collectedResults],
@@ -198,7 +198,7 @@ export default function Home() {
                 fileName: message.fileName,
                 error: message.error,
               });
-              activityLog.push({ time: now, message: `Failed: ${message.fileName} - ${message.error}`, type: "error" });
+              activityLog.push({ time: now, message: `Failed: Resume for REQ ${message.reqId} - ${message.error}`, type: "error" });
               setState((prev) => ({
                 ...prev,
                 errors: [...collectedErrors],
