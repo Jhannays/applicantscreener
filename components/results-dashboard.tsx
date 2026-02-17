@@ -480,6 +480,33 @@ export function ResultsDashboard({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedRetries, setSelectedRetries] = useState<Set<number>>(new Set());
 
+  // ─── Anonymized name mapping ────────────────────────────
+  // Build a stable mapping from real candidate names to anonymized labels.
+  // Uses "Candidate A", "Candidate B", ..., "Candidate Z", "Candidate AA", etc.
+  const nameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const seen: string[] = [];
+    for (const r of results) {
+      if (!map.has(r.candidateName)) {
+        seen.push(r.candidateName);
+        const idx = seen.length - 1;
+        let label = "";
+        let n = idx;
+        do {
+          label = String.fromCharCode(65 + (n % 26)) + label;
+          n = Math.floor(n / 26) - 1;
+        } while (n >= 0);
+        map.set(r.candidateName, `Candidate ${label}`);
+      }
+    }
+    return map;
+  }, [results]);
+
+  const getDisplayName = useCallback(
+    (realName: string) => nameMap.get(realName) || realName,
+    [nameMap]
+  );
+
   // Recalculate derived fields after a toggle and propagate up
   const recalculateAndUpdate = useCallback(
     (resultIndex: number, updatedResult: ApplicantResult) => {
@@ -580,14 +607,14 @@ export function ResultsDashboard({
       analyzeOverride(
         "relevance",
         result.reqId,
-        result.candidateName,
+        getDisplayName(result.candidateName),
         originalRelevant ? "Relevant" : "Not Relevant",
         role.isRelevant ? "Relevant" : "Not Relevant",
         `${role.title} at ${role.employer}`,
         role.reason
       );
     },
-    [results, recalculateAndUpdate, analyzeOverride]
+    [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
   );
 
   const handleChangeExpectationStatus = useCallback(
@@ -606,14 +633,14 @@ export function ResultsDashboard({
       analyzeOverride(
         "expectation",
         result.reqId,
-        result.candidateName,
+        getDisplayName(result.candidateName),
         originalStatus,
         newStatus,
         exp.expectation,
         exp.evidence
       );
     },
-    [results, recalculateAndUpdate, analyzeOverride]
+    [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
   );
   const [sortKey, setSortKey] = useState<SortKey>("relevantExp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -650,7 +677,7 @@ export function ResultsDashboard({
       const dir = sortDir === "asc" ? 1 : -1;
       switch (sortKey) {
         case "name":
-          return dir * a.candidateName.localeCompare(b.candidateName);
+          return dir * getDisplayName(a.candidateName).localeCompare(getDisplayName(b.candidateName));
         case "reqId":
           return dir * a.reqId.localeCompare(b.reqId);
         case "relevantExp":
@@ -755,7 +782,7 @@ export function ResultsDashboard({
 
       return [
         csvEscape(r.reqId),
-        csvEscape(r.candidateName),
+        csvEscape(getDisplayName(r.candidateName)),
         csvEscape(educationStr || "N/A"),
         csvEscape(skillsStr || "N/A"),
         csvEscape(yoeStr),
@@ -799,8 +826,12 @@ export function ResultsDashboard({
   };
 
   const exportJSON = () => {
+    const anonymized = results.map((r) => ({
+      ...r,
+      candidateName: getDisplayName(r.candidateName),
+    }));
     downloadFile(
-      JSON.stringify({ results, errors }, null, 2),
+      JSON.stringify({ results: anonymized, errors }, null, 2),
       "all_candidates.json",
       "application/json"
     );
@@ -814,7 +845,7 @@ export function ResultsDashboard({
     md += "| REQ ID | Resume | Candidate | Relevant Exp | Total Exp | Gaps | Req Met | Match |\n";
     md += "|--------|--------|-----------|-------------|-----------|------|---------|-------|\n";
     results.forEach((r) => {
-      md += `| ${r.reqId} | ${r.resumeFile} | ${r.candidateName} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
+      md += `| ${r.reqId} | ${r.resumeFile} | ${getDisplayName(r.candidateName)} | ${r.relevantYears}y ${r.relevantMonths}m | ${r.totalYears}y ${r.totalMonths}m | ${r.gapAnalysis.gapCount} | ${r.keyRequirementsMetCount}/${r.keyRequirementsMetCount + r.keyRequirementsMissingCount} | ${r.overallMatch} |\n`;
     });
 
     if (errors.length > 0) {
@@ -829,7 +860,7 @@ export function ResultsDashboard({
     md += "\n---\n\n";
 
     results.forEach((r) => {
-      md += `## ${r.candidateName} (REQ ${r.reqId})\n\n`;
+      md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${r.resumeFile}\n\n`;
       md += `**Overall Match:** ${r.overallMatch}\n`;
       md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
@@ -1325,7 +1356,7 @@ export function ResultsDashboard({
                       <td className="px-3 py-3">
                         <div>
                           <p className="font-medium text-foreground">
-                            {result.candidateName}
+                            {getDisplayName(result.candidateName)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {result.resumeFile}
