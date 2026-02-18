@@ -30,6 +30,8 @@ const initialState: ScreeningState = {
   currentStep: "",
   activityLog: [],
   correctionRules: [],
+  roleNotes: [],
+  smeSessionNotes: [],
 };
 
 export default function Home() {
@@ -254,10 +256,12 @@ export default function Home() {
   }, [state.jobFiles, state.resumeFiles, state.requisitionCSV]);
 
   const handleReset = useCallback(() => {
-    // Preserve correction rules so re-screening benefits from learned overrides
+    // Preserve correction rules and SME notes so re-screening benefits from learned overrides
     setState((prev) => ({
       ...initialState,
       correctionRules: prev.correctionRules,
+      roleNotes: prev.roleNotes,
+      smeSessionNotes: prev.smeSessionNotes,
     }));
   }, []);
 
@@ -617,6 +621,35 @@ export default function Home() {
               }
               onRetry={handleRetry}
               isRetrying={isRetrying}
+              roleNotes={state.roleNotes}
+              onRoleNoteChange={(roleKey, note) =>
+                setState((prev) => {
+                  const existing = prev.roleNotes.findIndex((rn) => rn.roleKey === roleKey);
+                  const updated = [...prev.roleNotes];
+                  if (existing >= 0) {
+                    updated[existing] = { ...updated[existing], note, createdAt: new Date().toISOString() };
+                  } else {
+                    updated.push({ roleKey, note, createdAt: new Date().toISOString() });
+                  }
+                  return { ...prev, roleNotes: updated };
+                })
+              }
+              smeSessionNotes={state.smeSessionNotes}
+              onSessionNoteAdd={(note) =>
+                setState((prev) => ({
+                  ...prev,
+                  smeSessionNotes: [
+                    ...prev.smeSessionNotes,
+                    { id: crypto.randomUUID(), note, createdAt: new Date().toISOString() },
+                  ],
+                }))
+              }
+              onSessionNoteDelete={(id) =>
+                setState((prev) => ({
+                  ...prev,
+                  smeSessionNotes: prev.smeSessionNotes.filter((n) => n.id !== id),
+                }))
+              }
             />
           </div>
         )}

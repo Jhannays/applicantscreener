@@ -22,12 +22,22 @@ import {
   RefreshCw,
   Play,
   Loader2,
+  MessageSquare,
+  NotebookPen,
+  Send,
+  Save,
+  FolderOpen,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
 import type {
   ApplicantResult,
   ExpectationCheck,
   ScreeningError,
   CorrectionRule,
+  RoleNote,
+  SMESessionNote,
+  SMESession,
 } from "@/lib/types";
 
 interface ResultsDashboardProps {
@@ -42,6 +52,13 @@ interface ResultsDashboardProps {
   onRetry: (failedErrors: ScreeningError[]) => void;
   /** Whether a retry is currently in progress */
   isRetrying: boolean;
+  /** Per-role SME notes */
+  roleNotes: RoleNote[];
+  onRoleNoteChange: (roleKey: string, note: string) => void;
+  /** Global SME session notes */
+  smeSessionNotes: SMESessionNote[];
+  onSessionNoteAdd: (note: string) => void;
+  onSessionNoteDelete: (id: string) => void;
 }
 
 const matchStyles: Record<string, string> = {
@@ -165,12 +182,18 @@ function ApplicantExpandedRow({
   result,
   onToggleRelevance,
   onChangeExpectationStatus,
+  roleNotes,
+  onRoleNoteChange,
 }: {
   result: ApplicantResult;
   onToggleRelevance: (roleIndex: number) => void;
   onChangeExpectationStatus: (expIndex: number, newStatus: ExpectationCheck["status"]) => void;
+  roleNotes: RoleNote[];
+  onRoleNoteChange: (roleKey: string, note: string) => void;
 }) {
   const [showFullRationale, setShowFullRationale] = useState(false);
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState("");
 
   const hasOverrides = result.roleRelevance.some((r) => r.manualOverride) ||
     result.expectations.some((e) => e.manualOverride);
@@ -369,12 +392,98 @@ function ApplicantExpandedRow({
                           )}
                         </td>
                       </tr>
-                      <tr className="border-b border-border last:border-0">
-                        <td colSpan={5} className="px-3 pb-3 pt-0">
+                      <tr className="border-b border-border/50">
+                        <td colSpan={5} className="px-3 pb-1 pt-0">
                           <div className={`rounded-md px-3 py-2 text-xs leading-relaxed ${r.isRelevant ? "bg-emerald-500/5 text-emerald-900" : "bg-red-500/5 text-red-900"}`}>
                             <span className="font-semibold">{r.isRelevant ? "Why relevant: " : "Why excluded: "}</span>
                             {r.reason}
                           </div>
+                        </td>
+                      </tr>
+                      {/* SME Note for this role */}
+                      <tr className="border-b border-border last:border-0">
+                        <td colSpan={5} className="px-3 pb-3 pt-1">
+                          {(() => {
+                            const roleKey = `${result.reqId}::${i}`;
+                            const existingNote = roleNotes.find((n) => n.roleKey === roleKey);
+                            const isEditing = editingNoteKey === roleKey;
+
+                            return (
+                              <div className="rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2">
+                                {isEditing ? (
+                                  <div className="space-y-1.5">
+                                    <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      <MessageSquare className="h-3 w-3" />
+                                      SME Note on This Role
+                                    </label>
+                                    <textarea
+                                      value={draftNote}
+                                      onChange={(e) => setDraftNote(e.target.value)}
+                                      placeholder="Why should the model treat this role differently? What relevance logic should apply?"
+                                      className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                      rows={2}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          if (draftNote.trim()) {
+                                            onRoleNoteChange(roleKey, draftNote.trim());
+                                          }
+                                          setEditingNoteKey(null);
+                                          setDraftNote("");
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                                      >
+                                        <Save className="h-2.5 w-2.5" />
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => { setEditingNoteKey(null); setDraftNote(""); }}
+                                        className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : existingNote ? (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                                        <MessageSquare className="h-3 w-3" />
+                                        SME Note
+                                      </span>
+                                      <button
+                                        onClick={() => {
+                                          setEditingNoteKey(roleKey);
+                                          setDraftNote(existingNote.note);
+                                        }}
+                                        className="text-[10px] font-medium text-primary hover:underline"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                    <p className="text-xs leading-relaxed text-foreground">
+                                      {existingNote.note}
+                                    </p>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {new Date(existingNote.createdAt).toLocaleTimeString()}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setEditingNoteKey(roleKey);
+                                      setDraftNote("");
+                                    }}
+                                    className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary"
+                                  >
+                                    <MessageSquare className="h-3 w-3" />
+                                    Add SME note on this role...
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                       </tr>
                     </tbody>
@@ -476,9 +585,19 @@ export function ResultsDashboard({
   onCorrectionRule,
   onRetry,
   isRetrying,
+  roleNotes,
+  onRoleNoteChange,
+  smeSessionNotes,
+  onSessionNoteAdd,
+  onSessionNoteDelete,
 }: ResultsDashboardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedRetries, setSelectedRetries] = useState<Set<number>>(new Set());
+  const [smePanelOpen, setSmePanelOpen] = useState(true);
+  const [smeInput, setSmeInput] = useState("");
+  const [showSavedSessions, setShowSavedSessions] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<SMESession[]>([]);
+  const [sessionNameInput, setSessionNameInput] = useState("");
 
   // ─── Anonymization ──────────────────────────────────────
   // Map real candidate names AND file names to anonymous labels.
@@ -519,6 +638,41 @@ export function ResultsDashboard({
       getDisplayFile: (real: string) => fileToLabel.get(real) || "Resume.pdf",
     };
   }, [results, errors]);
+
+  // ─── Session save / load ──────────────────────────────
+  const loadSavedSessions = useCallback(() => {
+    try {
+      const raw = localStorage.getItem("sme-sessions");
+      if (raw) setSavedSessions(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  const saveSession = useCallback(
+    (name: string) => {
+      const session: SMESession = {
+        id: crypto.randomUUID(),
+        name: name || `Session ${new Date().toLocaleDateString()}`,
+        createdAt: new Date().toISOString(),
+        sessionNotes: smeSessionNotes,
+        roleNotes,
+        correctionRules,
+      };
+      const existing = savedSessions.filter((s) => s.name !== name);
+      const updated = [session, ...existing];
+      localStorage.setItem("sme-sessions", JSON.stringify(updated));
+      setSavedSessions(updated);
+    },
+    [smeSessionNotes, roleNotes, correctionRules, savedSessions]
+  );
+
+  const deleteSession = useCallback(
+    (id: string) => {
+      const updated = savedSessions.filter((s) => s.id !== id);
+      localStorage.setItem("sme-sessions", JSON.stringify(updated));
+      setSavedSessions(updated);
+    },
+    [savedSessions]
+  );
 
   // Recalculate derived fields after a toggle and propagate up
   const recalculateAndUpdate = useCallback(
@@ -933,6 +1087,123 @@ export function ResultsDashboard({
     downloadFile(md, "screening_results.md", "text/markdown");
   };
 
+  // ─── Generate Model Developer Prompt ────────────────────
+  const generateModelPrompt = () => {
+    let prompt = "# Screening Model -- Relevance & Evaluation Logic\n\n";
+    prompt += `> Generated from SME review session on ${new Date().toLocaleDateString()}\n`;
+    prompt += `> ${smeSessionNotes.length} session notes, ${roleNotes.length} role-level notes, ${correctionRules.length} correction rules\n\n`;
+    prompt += "Use the rules and examples below to calibrate your screening logic. These were captured during a live review session with a Subject Matter Expert.\n\n";
+
+    // Section 1: Relevance Logic from Role Notes
+    prompt += "---\n\n## 1. Role Relevance Logic\n\n";
+    prompt += "The following notes describe how the SME expects role relevance to be determined. Apply these rules when deciding if a candidate's work experience is relevant to a job posting.\n\n";
+    if (roleNotes.length > 0) {
+      for (const rn of roleNotes) {
+        // Find the result and role this note corresponds to
+        const [reqId, idxStr] = rn.roleKey.split("::");
+        const roleIdx = parseInt(idxStr, 10);
+        const matchingResult = results.find((r) => r.reqId === reqId);
+        const role = matchingResult?.roleRelevance[roleIdx];
+        if (role) {
+          const relevance = role.isRelevant ? "RELEVANT" : "NOT RELEVANT";
+          prompt += `### ${role.title} at ${role.employer} -- marked ${relevance}\n`;
+          prompt += `- **Duration:** ${Math.floor(role.durationMonths / 12)}y ${role.durationMonths % 12}m\n`;
+          prompt += `- **AI Reason:** ${role.reason}\n`;
+          if (role.manualOverride) prompt += `- **Override:** The SME manually changed this determination.\n`;
+          prompt += `- **SME Note:** ${rn.note}\n`;
+          prompt += `- **Rule:** ${rn.note}\n\n`;
+        } else {
+          prompt += `- [REQ ${reqId}, Role #${roleIdx}]: ${rn.note}\n\n`;
+        }
+      }
+    } else {
+      prompt += "_No role-level notes were recorded._\n\n";
+    }
+
+    // Section 2: Override Examples
+    const relevanceOverrides = results.flatMap((r) =>
+      r.roleRelevance
+        .map((role, idx) => ({ role, idx, result: r }))
+        .filter(({ role }) => role.manualOverride)
+    );
+    const expectationOverrides = results.flatMap((r) =>
+      r.expectations
+        .map((exp, idx) => ({ exp, idx, result: r }))
+        .filter(({ exp }) => exp.manualOverride)
+    );
+
+    if (relevanceOverrides.length > 0 || expectationOverrides.length > 0) {
+      prompt += "---\n\n## 2. Concrete Override Examples\n\n";
+      prompt += "These are specific cases where the AI's initial determination was corrected by the SME. Study these patterns to avoid similar mistakes.\n\n";
+
+      if (relevanceOverrides.length > 0) {
+        prompt += "### Relevance Overrides\n\n";
+        for (const { role, result } of relevanceOverrides) {
+          prompt += `- **${role.title} at ${role.employer}** (REQ ${result.reqId}): The AI marked this as **${role.isRelevant ? "Not Relevant" : "Relevant"}**, but the SME corrected it to **${role.isRelevant ? "Relevant" : "Not Relevant"}**.\n`;
+          prompt += `  - AI reasoning: ${role.reason}\n`;
+          const roleKey = `${result.reqId}::${result.roleRelevance.indexOf(role)}`;
+          const note = roleNotes.find((rn) => rn.roleKey === roleKey);
+          if (note) prompt += `  - SME explanation: ${note.note}\n`;
+          prompt += "\n";
+        }
+      }
+
+      if (expectationOverrides.length > 0) {
+        prompt += "### Requirement Status Overrides\n\n";
+        for (const { exp, result } of expectationOverrides) {
+          prompt += `- **${exp.expectation}** (REQ ${result.reqId}): Status changed to **${exp.status}**.\n`;
+          prompt += `  - Evidence: ${exp.evidence || "None cited"}\n\n`;
+        }
+      }
+    }
+
+    // Section 3: Correction Rules (AI-generated lessons)
+    if (correctionRules.length > 0) {
+      prompt += "---\n\n## 3. Learned Correction Rules\n\n";
+      prompt += "These rules were generated by analyzing each override. They are generalized instructions the model MUST follow.\n\n";
+      const relevanceRules = correctionRules.filter((r) => r.type === "relevance");
+      const expectationRules = correctionRules.filter((r) => r.type === "expectation");
+
+      if (relevanceRules.length > 0) {
+        prompt += "### Relevance Rules\n\n";
+        for (const rule of relevanceRules) {
+          prompt += `- ${rule.lesson}\n`;
+        }
+        prompt += "\n";
+      }
+      if (expectationRules.length > 0) {
+        prompt += "### Requirement Evaluation Rules\n\n";
+        for (const rule of expectationRules) {
+          prompt += `- ${rule.lesson}\n`;
+        }
+        prompt += "\n";
+      }
+    }
+
+    // Section 4: General SME Guidance
+    prompt += "---\n\n## 4. General SME Guidance\n\n";
+    prompt += "The following notes capture the SME's overall philosophy and edge-case guidance for screening logic.\n\n";
+    if (smeSessionNotes.length > 0) {
+      for (const n of smeSessionNotes) {
+        prompt += `- ${n.note}\n`;
+      }
+      prompt += "\n";
+    } else {
+      prompt += "_No session-level notes were recorded._\n\n";
+    }
+
+    // Section 5: Summary Statistics
+    prompt += "---\n\n## 5. Session Statistics\n\n";
+    prompt += `- Candidates reviewed: ${results.length}\n`;
+    prompt += `- Relevance overrides: ${relevanceOverrides.length}\n`;
+    prompt += `- Requirement status overrides: ${expectationOverrides.length}\n`;
+    prompt += `- Correction rules generated: ${correctionRules.length}\n`;
+    prompt += `- Role-level SME notes: ${roleNotes.length}\n`;
+    prompt += `- Session-level SME notes: ${smeSessionNotes.length}\n`;
+
+    downloadFile(prompt, "model_developer_prompt.md", "text/markdown");
+  };
+
   const SortButton = ({
     label,
     sortKeyName,
@@ -1218,6 +1489,188 @@ export function ResultsDashboard({
         )}
       </div>
 
+      {/* SME Review Notes Panel */}
+      <div className="rounded-lg border border-border bg-card">
+        <button
+          onClick={() => setSmePanelOpen(!smePanelOpen)}
+          className="flex w-full items-center justify-between px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <NotebookPen className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">
+              SME Review Notes
+            </span>
+            {smeSessionNotes.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {smeSessionNotes.length}
+              </span>
+            )}
+            {roleNotes.length > 0 && (
+              <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-600">
+                {roleNotes.length} role note{roleNotes.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Save / Load buttons */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = sessionNameInput.trim() || `Session ${new Date().toLocaleDateString()}`;
+                saveSession(name);
+                setSessionNameInput("");
+              }}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+              title="Save current session"
+            >
+              <Save className="h-3 w-3" />
+              Save
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                loadSavedSessions();
+                setShowSavedSessions(!showSavedSessions);
+              }}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+              title="Load a saved session"
+            >
+              <FolderOpen className="h-3 w-3" />
+              Load
+            </button>
+            {smePanelOpen ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </button>
+
+        {smePanelOpen && (
+          <div className="border-t border-border px-4 py-3 space-y-3">
+            {/* Saved sessions dropdown */}
+            {showSavedSessions && (
+              <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Saved Sessions
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={sessionNameInput}
+                      onChange={(e) => setSessionNameInput(e.target.value)}
+                      placeholder="Session name..."
+                      className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </div>
+                {savedSessions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No saved sessions yet.</p>
+                ) : (
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {savedSessions.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between rounded-md bg-background px-3 py-2 text-xs"
+                      >
+                        <div>
+                          <span className="font-medium text-foreground">{s.name}</span>
+                          <span className="ml-2 text-muted-foreground">
+                            {new Date(s.createdAt).toLocaleString()} -- {s.sessionNotes.length} notes, {s.roleNotes.length} role notes
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Restore session notes and role notes
+                              for (const n of s.sessionNotes) onSessionNoteAdd(n.note);
+                              for (const rn of s.roleNotes) onRoleNoteChange(rn.roleKey, rn.note);
+                              setShowSavedSessions(false);
+                            }}
+                            className="rounded px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSession(s.id);
+                            }}
+                            className="rounded px-1.5 py-1 text-[11px] text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Conversation log */}
+            {smeSessionNotes.length > 0 && (
+              <div className="max-h-60 space-y-2 overflow-y-auto">
+                {smeSessionNotes.map((n) => (
+                  <div
+                    key={n.id}
+                    className="group flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2"
+                  >
+                    <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-primary/60" />
+                    <div className="flex-1">
+                      <p className="text-xs leading-relaxed text-foreground">{n.note}</p>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(n.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => onSessionNoteDelete(n.id)}
+                      className="shrink-0 rounded p-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input */}
+            <div className="flex items-start gap-2">
+              <textarea
+                value={smeInput}
+                onChange={(e) => setSmeInput(e.target.value)}
+                placeholder="Type SME notes here... e.g. 'Roles in home health should count as relevant for nursing positions because...'"
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && smeInput.trim()) {
+                    onSessionNoteAdd(smeInput.trim());
+                    setSmeInput("");
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (smeInput.trim()) {
+                    onSessionNoteAdd(smeInput.trim());
+                    setSmeInput("");
+                  }
+                }}
+                disabled={!smeInput.trim()}
+                className="rounded-md bg-primary px-3 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Press Ctrl+Enter to send. These notes will be included when generating the model developer prompt.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Correction Rules Indicator */}
       {correctionRules.length > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5">
@@ -1289,6 +1742,15 @@ export function ResultsDashboard({
           >
             <Download className="h-3.5 w-3.5" />
             Markdown
+          </button>
+          <button
+            onClick={generateModelPrompt}
+            disabled={smeSessionNotes.length === 0 && roleNotes.length === 0 && correctionRules.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Generate a structured prompt document distilling all SME notes, overrides, and correction rules for your model developer"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Generate Model Prompt
           </button>
           <button
             onClick={onReset}
@@ -1459,6 +1921,8 @@ export function ResultsDashboard({
                           const globalIndex = results.indexOf(result);
                           if (globalIndex !== -1) handleChangeExpectationStatus(globalIndex, expIndex, newStatus);
                         }}
+                        roleNotes={roleNotes}
+                        onRoleNoteChange={onRoleNoteChange}
                       />
                     )}
                   </tbody>

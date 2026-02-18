@@ -158,6 +158,35 @@ export interface ScreeningError {
 }
 
 // ──────────────────────────────────────────────
+// SME Notes (human-in-the-loop relevancy logic)
+// ──────────────────────────────────────────────
+
+/** A note attached to a specific role's relevance determination */
+export interface RoleNote {
+  /** Composite key: `${reqId}::${roleIndex}` */
+  roleKey: string;
+  note: string;
+  createdAt: string;
+}
+
+/** A session-level SME conversation entry */
+export interface SMESessionNote {
+  id: string;
+  note: string;
+  createdAt: string;
+}
+
+/** A saved SME session that can be recalled later */
+export interface SMESession {
+  id: string;
+  name: string;
+  createdAt: string;
+  sessionNotes: SMESessionNote[];
+  roleNotes: RoleNote[];
+  correctionRules: CorrectionRule[];
+}
+
+// ──────────────────────────────────────────────
 // Correction Rules (human-in-the-loop learning)
 // ──────────────────────────────────────────────
 
@@ -202,4 +231,8 @@ export interface ScreeningState {
   activityLog: ActivityLogEntry[];
   /** Accumulated correction rules from human overrides -- fed back into AI prompts */
   correctionRules: CorrectionRule[];
+  /** Per-role SME notes on relevance logic */
+  roleNotes: RoleNote[];
+  /** Global SME session conversation notes */
+  smeSessionNotes: SMESessionNote[];
 }
