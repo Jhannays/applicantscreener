@@ -165,7 +165,7 @@ export default function Home() {
               activityLog.push({ time: now, message: message.message, type: "step" });
               setState((prev) => ({
                 ...prev,
-                currentFile: `[REQ ${message.reqId}] Resume ${collectedResults.length + collectedErrors.length + 1}`,
+                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
                 currentStep: message.step,
                 activityLog: [...activityLog],
               }));
@@ -176,7 +176,7 @@ export default function Home() {
                 ...prev,
                 progress: fractionalProgress,
                 totalToProcess: message.total,
-                currentFile: `[REQ ${message.reqId}] Resume ${message.current + 1}`,
+                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
               }));
             } else if (message.type === "progress") {
               // Full resume completed
@@ -184,11 +184,11 @@ export default function Home() {
                 ...prev,
                 progress: message.current,
                 totalToProcess: message.total,
-                currentFile: `[REQ ${message.reqId}] Resume ${message.current}`,
+                currentFile: `[REQ ${message.reqId}] ${message.fileName}`,
               }));
             } else if (message.type === "result") {
               collectedResults.push(message.data);
-              activityLog.push({ time: now, message: `Completed: Candidate ${collectedResults.length}`, type: "success" });
+              activityLog.push({ time: now, message: `Completed: ${message.data.candidateName}`, type: "success" });
               setState((prev) => ({
                 ...prev,
                 results: [...collectedResults],

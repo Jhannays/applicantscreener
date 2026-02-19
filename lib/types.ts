@@ -110,6 +110,8 @@ export interface ExpectationCheck {
   expectation: string;
   /** Whether this requirement is a minimum (must-have) or preferred (nice-to-have) */
   category: "minimum" | "preferred";
+  /** When the requirement must be fulfilled */
+  timing: "upon_hire" | "after_hire" | "unspecified";
   status: "Met" | "Partially Met" | "Not Evident";
   evidence: string;
   /** true when a human reviewer has overridden the AI's status determination */
@@ -205,7 +207,7 @@ export interface CorrectionRule {
   createdAt: string;
 }
 
-// ──────────────────────────────────────────────
+// ────────────────���─────────────────────────────
 // App State
 // ──────────────────────────────────────────────
 

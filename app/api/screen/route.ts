@@ -60,6 +60,7 @@ const expectationsSchema = z.object({
     z.object({
       expectation: z.string(),
       category: z.enum(["minimum", "preferred"]),
+      timing: z.enum(["upon_hire", "after_hire", "unspecified"]),
       status: z.enum(["Met", "Partially Met", "Not Evident"]),
       evidence: z.string(),
     })
@@ -368,6 +369,13 @@ For EACH numbered requirement above, evaluate the resume:
 - "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
 - "Not Evident" = no evidence found in the resume
 
+TIMING CLASSIFICATION -- for each requirement, determine WHEN it must be fulfilled:
+- "upon_hire" = the candidate MUST have this at the time of hire (e.g. active licenses, required degrees, minimum years of experience, mandatory certifications that cannot be obtained after starting)
+- "after_hire" = the requirement can be fulfilled after the hire date (e.g. "must obtain within 90 days", "training provided", "obtain upon hire", certifications the employer will help the employee get, orientation requirements)
+- "unspecified" = the job posting does not clearly indicate when this must be met
+
+Look for language clues: "must have upon hire", "required at time of appointment", "obtain within X days/months", "training provided", "will be required to obtain", etc. If the posting says the cert/license is simply "required" with no timing language, default to "upon_hire" for licenses/certifications and "unspecified" for other requirements.
+
 IMPORTANT:
 - Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred").
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
@@ -408,6 +416,13 @@ For each requirement found in the job posting:
 - "Met" = clear, direct evidence in the resume
 - "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
 - "Not Evident" = no evidence found in the resume
+
+TIMING CLASSIFICATION -- for each requirement, determine WHEN it must be fulfilled:
+- "upon_hire" = the candidate MUST have this at the time of hire (e.g. active licenses, required degrees, minimum years of experience, mandatory certifications that cannot be obtained after starting)
+- "after_hire" = the requirement can be fulfilled after the hire date (e.g. "must obtain within 90 days", "training provided", "obtain upon hire", certifications the employer will help the employee get, orientation requirements)
+- "unspecified" = the job posting does not clearly indicate when this must be met
+
+Look for language clues: "must have upon hire", "required at time of appointment", "obtain within X days/months", "training provided", "will be required to obtain", etc. If the posting says the cert/license is simply "required" with no timing language, default to "upon_hire" for licenses/certifications and "unspecified" for other requirements.
 
 IMPORTANT:
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
@@ -917,9 +932,10 @@ export async function POST(req: Request) {
             rationale += `   ${minimumReqs.length} minimum requirement(s) found in posting.\n`;
             rationale += `   Met: ${minMet} | Partially Met: ${minPartial} | Not Evident: ${minNotEvident}\n`;
             rationale += `   Minimum requirements score: ${(minimumScore * 100).toFixed(0)}%\n`;
+            const timingTag = (t: string) => t === "upon_hire" ? " [UPON HIRE]" : t === "after_hire" ? " [AFTER HIRE]" : "";
             for (const e of minimumReqs) {
               const icon = e.status === "Met" ? "[MET]" : e.status === "Partially Met" ? "[PARTIAL]" : "[MISSING]";
-              rationale += `   ${icon} ${e.expectation}\n`;
+              rationale += `   ${icon}${timingTag(e.timing)} ${e.expectation}\n`;
               if (e.evidence) rationale += `         Evidence: ${e.evidence}\n`;
             }
             rationale += `\n`;
@@ -931,7 +947,7 @@ export async function POST(req: Request) {
               rationale += `   Preferred score: ${(preferredScore * 100).toFixed(0)}% (informational only)\n`;
               for (const e of preferredReqs) {
                 const icon = e.status === "Met" ? "[MET]" : e.status === "Partially Met" ? "[PARTIAL]" : "[N/A]";
-                rationale += `   ${icon} ${e.expectation}\n`;
+                rationale += `   ${icon}${timingTag(e.timing)} ${e.expectation}\n`;
                 if (e.evidence) rationale += `         Evidence: ${e.evidence}\n`;
               }
               rationale += `\n`;

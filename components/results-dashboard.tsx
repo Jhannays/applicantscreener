@@ -97,32 +97,46 @@ function ExpectationsTable({
     onStatusChange(globalIndex, nextStatus);
   };
 
+  const timingStyles: Record<string, { label: string; className: string }> = {
+    upon_hire: { label: "Upon Hire", className: "bg-rose-500/10 text-rose-700 border-rose-200" },
+    after_hire: { label: "After Hire", className: "bg-amber-500/10 text-amber-700 border-amber-200" },
+    unspecified: { label: "Unspecified", className: "bg-muted text-muted-foreground border-border" },
+  };
+
   const renderRows = (items: ExpectationCheck[]) =>
-    items.map((c, i) => (
-      <tr key={i} className="border-b border-border last:border-0">
-        <td className="px-3 py-2 text-sm text-foreground">
-          {c.expectation}
-          {c.manualOverride && (
-            <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
-              OVERRIDDEN
+    items.map((c, i) => {
+      const timing = timingStyles[c.timing] || timingStyles.unspecified;
+      return (
+        <tr key={i} className="border-b border-border last:border-0">
+          <td className="px-3 py-2 text-sm text-foreground">
+            {c.expectation}
+            {c.manualOverride && (
+              <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                OVERRIDDEN
+              </span>
+            )}
+          </td>
+          <td className="px-3 py-2">
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${timing.className}`}>
+              {timing.label}
             </span>
-          )}
-        </td>
-        <td className="px-3 py-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); handleCycle(c); }}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-primary/30 ${statusStyles[c.status] || ""}`}
-            title="Click to cycle status: Met / Partially Met / Not Evident"
-          >
-            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
-            {c.status}
-          </button>
-        </td>
-        <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
-          {c.evidence || "--"}
-        </td>
-      </tr>
-    ));
+          </td>
+          <td className="px-3 py-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleCycle(c); }}
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-primary/30 ${statusStyles[c.status] || ""}`}
+              title="Click to cycle status: Met / Partially Met / Not Evident"
+            >
+              <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+              {c.status}
+            </button>
+          </td>
+          <td className="max-w-xs px-3 py-2 text-xs text-muted-foreground">
+            {c.evidence || "--"}
+          </td>
+        </tr>
+      );
+    });
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -131,6 +145,9 @@ function ExpectationsTable({
           <tr className="border-b border-border bg-muted/50">
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
               Requirement
+            </th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              Timing
             </th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
               Status
@@ -144,7 +161,7 @@ function ExpectationsTable({
           {minimumChecks.length > 0 && (
             <>
               <tr>
-                <td colSpan={3} className="bg-muted/30 px-3 py-1.5">
+                <td colSpan={4} className="bg-muted/30 px-3 py-1.5">
                   <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
                     Minimum Requirements
                   </span>
@@ -159,7 +176,7 @@ function ExpectationsTable({
           {preferredChecks.length > 0 && (
             <>
               <tr>
-                <td colSpan={3} className="bg-blue-500/5 px-3 py-1.5">
+                <td colSpan={4} className="bg-blue-500/5 px-3 py-1.5">
                   <span className="text-xs font-semibold uppercase tracking-wider text-blue-700">
                     Preferred Requirements
                   </span>
@@ -599,45 +616,9 @@ export function ResultsDashboard({
   const [savedSessions, setSavedSessions] = useState<SMESession[]>([]);
   const [sessionNameInput, setSessionNameInput] = useState("");
 
-  // ─── Anonymization ──────────────────────────────────────
-  // Map real candidate names AND file names to anonymous labels.
-  // No PII is ever shown in the UI, exports, or sent to the AI.
-  const { getDisplayName, getDisplayFile } = useMemo(() => {
-    const nameToLabel = new Map<string, string>();
-    const fileToLabel = new Map<string, string>();
-    let nameCounter = 0;
-    let fileCounter = 0;
-
-    const toLetter = (idx: number) => {
-      let label = "";
-      let n = idx;
-      do {
-        label = String.fromCharCode(65 + (n % 26)) + label;
-        n = Math.floor(n / 26) - 1;
-      } while (n >= 0);
-      return label;
-    };
-
-    for (const r of results) {
-      if (!nameToLabel.has(r.candidateName)) {
-        nameToLabel.set(r.candidateName, `Candidate ${toLetter(nameCounter++)}`);
-      }
-      if (!fileToLabel.has(r.resumeFile)) {
-        fileToLabel.set(r.resumeFile, `Resume-${toLetter(fileCounter++)}.pdf`);
-      }
-    }
-    // Also map error file names
-    for (const e of errors) {
-      if (!fileToLabel.has(e.fileName)) {
-        fileToLabel.set(e.fileName, `Resume-${toLetter(fileCounter++)}.pdf`);
-      }
-    }
-
-    return {
-      getDisplayName: (real: string) => nameToLabel.get(real) || "Candidate",
-      getDisplayFile: (real: string) => fileToLabel.get(real) || "Resume.pdf",
-    };
-  }, [results, errors]);
+  // ─── Display helpers (pass-through -- names shown as-is) ─
+  const getDisplayName = useCallback((name: string) => name, []);
+  const getDisplayFile = useCallback((file: string) => file, []);
 
   // ─── Session save / load ──────────────────────────────
   const loadSavedSessions = useCallback(() => {
@@ -1073,10 +1054,11 @@ export function ResultsDashboard({
 
       if (r.expectations.length > 0) {
         md += "### Job Expects vs Resume Shows\n\n";
-        md += "| Expectation | Status | Evidence |\n";
-        md += "|-------------|--------|----------|\n";
+        md += "| Expectation | Timing | Status | Evidence |\n";
+        md += "|-------------|--------|--------|----------|\n";
+        const timingLabel = (t: string) => t === "upon_hire" ? "Upon Hire" : t === "after_hire" ? "After Hire" : "Unspecified";
         r.expectations.forEach((e) => {
-          md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          md += `| ${e.expectation} | ${timingLabel(e.timing)} | ${e.status} | ${e.evidence || "--"} |\n`;
         });
         md += "\n";
       }
@@ -1150,8 +1132,9 @@ export function ResultsDashboard({
 
       if (expectationOverrides.length > 0) {
         prompt += "### Requirement Status Overrides\n\n";
+        const timingLabel = (t: string) => t === "upon_hire" ? "Upon Hire" : t === "after_hire" ? "After Hire" : "Unspecified";
         for (const { exp, result } of expectationOverrides) {
-          prompt += `- **${exp.expectation}** (REQ ${result.reqId}): Status changed to **${exp.status}**.\n`;
+          prompt += `- **${exp.expectation}** (REQ ${result.reqId}, Timing: ${timingLabel(exp.timing)}): Status changed to **${exp.status}**.\n`;
           prompt += `  - Evidence: ${exp.evidence || "None cited"}\n\n`;
         }
       }
