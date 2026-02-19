@@ -32,11 +32,13 @@ const initialState: ScreeningState = {
   correctionRules: [],
   roleNotes: [],
   smeSessionNotes: [],
+  smeQuestions: [],
 };
 
 export default function Home() {
   const [state, setState] = useState<ScreeningState>(initialState);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
 
   const handleScreen = useCallback(async () => {
     const hasJobSource = state.jobFiles.length > 0 || state.requisitionCSV.length > 0;
@@ -262,8 +264,120 @@ export default function Home() {
       correctionRules: prev.correctionRules,
       roleNotes: prev.roleNotes,
       smeSessionNotes: prev.smeSessionNotes,
+      smeQuestions: prev.smeQuestions,
     }));
   }, []);
+
+  const handleGenerateQuestions = useCallback(
+    async (reqId: string) => {
+      if (isGeneratingQuestions) return;
+      setIsGeneratingQuestions(true);
+      try {
+        // Build summaries from current results for this reqId
+        const reqResults = state.results.filter((r) => r.reqId === reqId);
+        const roleRelevanceSummary = reqResults
+          .flatMap((r) =>
+            r.roleRelevance.map(
+              (role) =>
+                `- ${role.title} at ${role.employer} (${Math.floor(role.durationMonths / 12)}y ${role.durationMonths % 12}m): ${role.isRelevant ? "RELEVANT" : "NOT RELEVANT"}${role.manualOverride ? " [OVERRIDDEN]" : ""} -- ${role.reason}`
+            )
+          )
+          .join("\n");
+
+        const expectationsSummary = reqResults
+          .flatMap((r) =>
+            r.expectations.map(
+              (e) =>
+                `- [${e.category.toUpperCase()}] [${e.timing === "upon_hire" ? "UPON HIRE" : e.timing === "after_hire" ? "AFTER HIRE" : "UNSPECIFIED"}] ${e.expectation}: ${e.status}${e.manualOverride ? " [OVERRIDDEN]" : ""} -- ${e.evidence || "No evidence"}`
+            )
+          )
+          .join("\n");
+
+        // Build job text from the first matching job file or CSV data
+        const csvRow = state.requisitionCSV.find(
+          (r) => r.requisitionNumber === reqId
+        );
+        const jobText = csvRow
+          ? [
+              csvRow.jobQualifications,
+              csvRow.experienceNeeded,
+              csvRow.qualifications,
+              csvRow.certificationsRequired,
+              csvRow.certificationsPreferred,
+              csvRow.degreeTypePreferred,
+              csvRow.experienceDataverse,
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : `Job posting for REQ ${reqId}`;
+
+        const correctionRulesText = state.correctionRules
+          .filter((r) => r.reqId === reqId)
+          .map((r) => `- [${r.type}] ${r.lesson}`)
+          .join("\n");
+
+        const overridesText = [
+          ...reqResults.flatMap((r) =>
+            r.roleRelevance
+              .filter((role) => role.manualOverride)
+              .map(
+                (role) =>
+                  `- Relevance: ${role.title} at ${role.employer} was overridden to ${role.isRelevant ? "RELEVANT" : "NOT RELEVANT"}`
+              )
+          ),
+          ...reqResults.flatMap((r) =>
+            r.expectations
+              .filter((e) => e.manualOverride)
+              .map(
+                (e) =>
+                  `- Requirement: "${e.expectation}" was overridden to ${e.status}`
+              )
+          ),
+        ].join("\n");
+
+        const resp = await fetch("/api/screen/generate-sme-questions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reqId,
+            jobText,
+            roleRelevanceSummary,
+            expectationsSummary,
+            correctionRules: correctionRulesText,
+            existingOverrides: overridesText,
+          }),
+        });
+
+        const data = await resp.json();
+        if (data.questions?.length > 0) {
+          const newQuestions = data.questions.map(
+            (q: { question: string; context: string; category: string }) => ({
+              id: crypto.randomUUID(),
+              reqId,
+              question: q.question,
+              context: q.context,
+              category: q.category,
+              answer: null,
+              answeredAt: null,
+            })
+          );
+          // Replace existing questions for this reqId, keep questions for other reqIds
+          setState((prev) => ({
+            ...prev,
+            smeQuestions: [
+              ...prev.smeQuestions.filter((q) => q.reqId !== reqId),
+              ...newQuestions,
+            ],
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to generate SME questions:", err);
+      } finally {
+        setIsGeneratingQuestions(false);
+      }
+    },
+    [isGeneratingQuestions, state.results, state.requisitionCSV, state.correctionRules]
+  );
 
   const handleRetry = useCallback(
     async (failedErrors: ScreeningError[]) => {
@@ -650,6 +764,19 @@ export default function Home() {
                   smeSessionNotes: prev.smeSessionNotes.filter((n) => n.id !== id),
                 }))
               }
+              smeQuestions={state.smeQuestions}
+              onQuestionAnswer={(questionId, answer) =>
+                setState((prev) => ({
+                  ...prev,
+                  smeQuestions: prev.smeQuestions.map((q) =>
+                    q.id === questionId
+                      ? { ...q, answer, answeredAt: new Date().toISOString() }
+                      : q
+                  ),
+                }))
+              }
+              onGenerateQuestions={handleGenerateQuestions}
+              isGeneratingQuestions={isGeneratingQuestions}
             />
           </div>
         )}

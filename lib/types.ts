@@ -178,6 +178,20 @@ export interface SMESessionNote {
   createdAt: string;
 }
 
+/** An AI-generated question targeting a specific ambiguity for the SME to clarify */
+export interface SMEQuestion {
+  id: string;
+  reqId: string;
+  question: string;
+  /** Why this question matters -- shown as subtext to give the SME context */
+  context: string;
+  /** Grouping label, e.g. "Relevance Logic", "Certification Timing", "Experience Equivalency" */
+  category: string;
+  /** SME's answer -- null means unanswered */
+  answer: string | null;
+  answeredAt: string | null;
+}
+
 /** A saved SME session that can be recalled later */
 export interface SMESession {
   id: string;
@@ -186,6 +200,7 @@ export interface SMESession {
   sessionNotes: SMESessionNote[];
   roleNotes: RoleNote[];
   correctionRules: CorrectionRule[];
+  smeQuestions: SMEQuestion[];
 }
 
 // ──────────────────────────────────────────────
@@ -237,4 +252,6 @@ export interface ScreeningState {
   roleNotes: RoleNote[];
   /** Global SME session conversation notes */
   smeSessionNotes: SMESessionNote[];
+  /** AI-generated guided questions for the SME, per reqId */
+  smeQuestions: SMEQuestion[];
 }
