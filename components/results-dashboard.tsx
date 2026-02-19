@@ -207,40 +207,16 @@ function ApplicantExpandedRow({
   onChangeExpectationStatus,
   roleNotes,
   onRoleNoteChange,
-  smeQuestions,
-  onQuestionAnswer,
-  onGenerateQuestions,
-  isGeneratingQuestions,
 }: {
   result: ApplicantResult;
   onToggleRelevance: (roleIndex: number) => void;
   onChangeExpectationStatus: (expIndex: number, newStatus: ExpectationCheck["status"]) => void;
   roleNotes: RoleNote[];
   onRoleNoteChange: (roleKey: string, note: string) => void;
-  smeQuestions: SMEQuestion[];
-  onQuestionAnswer: (questionId: string, answer: string) => void;
-  onGenerateQuestions: (reqId: string) => void;
-  isGeneratingQuestions: boolean;
 }) {
   const [showFullRationale, setShowFullRationale] = useState(false);
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState("");
-  const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
-  const [draftAnswer, setDraftAnswer] = useState("");
-
-  // Filter questions relevant to this candidate's requisition
-  const reqQuestions = smeQuestions.filter((q) => q.reqId === result.reqId);
-  const answeredCount = reqQuestions.filter((q) => q.answer).length;
-
-  const categoryColors: Record<string, string> = {
-    "Relevance Logic": "bg-violet-500/10 text-violet-700 border-violet-200",
-    "Experience Equivalency": "bg-blue-500/10 text-blue-700 border-blue-200",
-    "Certification/License": "bg-rose-500/10 text-rose-700 border-rose-200",
-    "Timing": "bg-amber-500/10 text-amber-700 border-amber-200",
-    "Threshold/Scoring": "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-    "Domain Nuance": "bg-cyan-500/10 text-cyan-700 border-cyan-200",
-    "Edge Case": "bg-orange-500/10 text-orange-700 border-orange-200",
-  };
 
   const hasOverrides = result.roleRelevance.some((r) => r.manualOverride) ||
     result.expectations.some((e) => e.manualOverride);
@@ -538,147 +514,6 @@ function ApplicantExpandedRow({
                 </tbody>
               </table>
             </div>
-
-            {/* Inline SME Questions for this requisition */}
-            <div className="mt-3 rounded-lg border border-primary/20 bg-primary/[0.02]">
-              <div className="flex items-center justify-between px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-semibold text-foreground">
-                    SME Questions for REQ {result.reqId}
-                  </span>
-                  {reqQuestions.length > 0 && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                      {answeredCount}/{reqQuestions.length} answered
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => onGenerateQuestions(result.reqId)}
-                  disabled={isGeneratingQuestions}
-                  className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
-                >
-                  {isGeneratingQuestions ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3 w-3" />
-                  )}
-                  {reqQuestions.length > 0 ? "Regenerate" : "Generate Questions"}
-                </button>
-              </div>
-
-              {reqQuestions.length > 0 ? (
-                <div className="border-t border-primary/10 px-3 py-2 space-y-2 max-h-[500px] overflow-y-auto">
-                  {reqQuestions.map((q) => {
-                    const isEditing = editingAnswerId === q.id;
-                    const catStyle = categoryColors[q.category] || "bg-muted text-muted-foreground border-border";
-
-                    return (
-                      <div
-                        key={q.id}
-                        className={`rounded-md border p-3 space-y-2 transition-colors ${q.answer ? "border-emerald-500/20 bg-emerald-500/[0.02]" : "border-border bg-background"}`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catStyle}`}>
-                              {q.category}
-                            </span>
-                            {q.answer && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600">
-                                <CheckCircle className="h-2.5 w-2.5" />
-                                Answered
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm font-medium text-foreground leading-relaxed">
-                            {q.question}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed italic">
-                            {q.context}
-                          </p>
-                        </div>
-
-                        {isEditing ? (
-                          <div className="space-y-1.5">
-                            <textarea
-                              value={draftAnswer}
-                              onChange={(e) => setDraftAnswer(e.target.value)}
-                              placeholder="Record the SME's answer. Be specific -- this becomes a rule the model follows."
-                              className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-                              rows={3}
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && draftAnswer.trim()) {
-                                  onQuestionAnswer(q.id, draftAnswer.trim());
-                                  setEditingAnswerId(null);
-                                  setDraftAnswer("");
-                                }
-                              }}
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  if (draftAnswer.trim()) {
-                                    onQuestionAnswer(q.id, draftAnswer.trim());
-                                  }
-                                  setEditingAnswerId(null);
-                                  setDraftAnswer("");
-                                }}
-                                className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
-                              >
-                                <Save className="h-2.5 w-2.5" />
-                                Save
-                              </button>
-                              <button
-                                onClick={() => { setEditingAnswerId(null); setDraftAnswer(""); }}
-                                className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
-                              >
-                                Cancel
-                              </button>
-                              <span className="text-[10px] text-muted-foreground">Ctrl+Enter to save</span>
-                            </div>
-                          </div>
-                        ) : q.answer ? (
-                          <div className="rounded-md bg-emerald-500/5 border border-emerald-500/10 px-3 py-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
-                                SME Answer
-                              </span>
-                              <button
-                                onClick={() => { setEditingAnswerId(q.id); setDraftAnswer(q.answer || ""); }}
-                                className="text-[10px] font-medium text-primary hover:underline"
-                              >
-                                Edit
-                              </button>
-                            </div>
-                            <p className="text-xs leading-relaxed text-foreground">{q.answer}</p>
-                            {q.answeredAt && (
-                              <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                                {new Date(q.answeredAt).toLocaleTimeString()}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => { setEditingAnswerId(q.id); setDraftAnswer(""); }}
-                            className="flex w-full items-center gap-1.5 rounded-md border border-dashed border-primary/20 bg-primary/[0.02] px-3 py-2 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                          >
-                            <MessageSquare className="h-3 w-3" />
-                            Record SME answer...
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="border-t border-primary/10 px-3 py-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">
-                    Generate domain-specific questions based on this candidate's screening results to walk through with your SME.
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Gap Analysis */}
@@ -790,6 +625,8 @@ export function ResultsDashboard({
   const [showSavedSessions, setShowSavedSessions] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SMESession[]>([]);
   const [sessionNameInput, setSessionNameInput] = useState("");
+  const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
+  const [draftAnswer, setDraftAnswer] = useState("");
 
   // ─── Display helpers (pass-through -- names shown as-is) ─
   const getDisplayName = useCallback((name: string) => name, []);
@@ -1807,29 +1644,168 @@ export function ResultsDashboard({
               </div>
             )}
 
-            {/* Guided SME Questions Summary */}
-            {smeQuestions.length > 0 && (
-              <div className="flex items-center gap-3 rounded-md border border-primary/15 bg-primary/[0.03] px-3 py-2">
-                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-                <div className="flex-1">
-                  <span className="text-xs font-medium text-foreground">
-                    {smeQuestions.filter((q) => q.answer).length}/{smeQuestions.length} guided questions answered
+            {/* Guided SME Questions */}
+            <div className="rounded-md border border-primary/20 bg-primary/[0.03]">
+              <div className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-foreground">
+                    Guided SME Questions
                   </span>
-                  <span className="ml-2 text-[11px] text-muted-foreground">
-                    -- expand a candidate row to view and answer questions inline
-                  </span>
-                </div>
-                {reqIds.map((rid) => {
-                  const ridCount = smeQuestions.filter((q) => q.reqId === rid).length;
-                  const ridAnswered = smeQuestions.filter((q) => q.reqId === rid && q.answer).length;
-                  return (
-                    <span key={rid} className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                      REQ {rid}: {ridAnswered}/{ridCount}
+                  {smeQuestions.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {smeQuestions.filter((q) => q.answer).length}/{smeQuestions.length} answered
                     </span>
-                  );
-                })}
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {reqIds.map((rid) => (
+                    <button
+                      key={rid}
+                      onClick={() => onGenerateQuestions(rid)}
+                      disabled={isGeneratingQuestions}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
+                    >
+                      {isGeneratingQuestions ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      {reqIds.length > 1 ? `Generate (${rid})` : "Generate Questions"}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
+
+              {smeQuestions.length > 0 && (
+                <div className="border-t border-primary/10 px-3 py-2 space-y-2 max-h-[420px] overflow-y-auto">
+                  {smeQuestions.map((q) => {
+                    const isEditing = editingAnswerId === q.id;
+                    const categoryColors: Record<string, string> = {
+                      "Relevance Logic": "bg-violet-500/10 text-violet-700 border-violet-200",
+                      "Experience Equivalency": "bg-blue-500/10 text-blue-700 border-blue-200",
+                      "Certification/License": "bg-rose-500/10 text-rose-700 border-rose-200",
+                      "Timing": "bg-amber-500/10 text-amber-700 border-amber-200",
+                      "Threshold/Scoring": "bg-emerald-500/10 text-emerald-700 border-emerald-200",
+                      "Domain Nuance": "bg-cyan-500/10 text-cyan-700 border-cyan-200",
+                      "Edge Case": "bg-orange-500/10 text-orange-700 border-orange-200",
+                    };
+                    const catStyle = categoryColors[q.category] || "bg-muted text-muted-foreground border-border";
+
+                    return (
+                      <div key={q.id} className="rounded-md border border-border bg-background p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catStyle}`}>
+                                {q.category}
+                              </span>
+                              {q.reqId && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  REQ {q.reqId}
+                                </span>
+                              )}
+                              {q.answer && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600">
+                                  <CheckCircle className="h-2.5 w-2.5" />
+                                  Answered
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium text-foreground leading-relaxed">
+                              {q.question}
+                            </p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {q.context}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Answer area */}
+                        {isEditing ? (
+                          <div className="space-y-1.5">
+                            <textarea
+                              value={draftAnswer}
+                              onChange={(e) => setDraftAnswer(e.target.value)}
+                              placeholder="Type the SME's answer here. Be specific -- this will become a rule the model follows."
+                              className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                              rows={3}
+                              autoFocus
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  if (draftAnswer.trim()) {
+                                    onQuestionAnswer(q.id, draftAnswer.trim());
+                                  }
+                                  setEditingAnswerId(null);
+                                  setDraftAnswer("");
+                                }}
+                                className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10"
+                              >
+                                <Save className="h-2.5 w-2.5" />
+                                Save Answer
+                              </button>
+                              <button
+                                onClick={() => { setEditingAnswerId(null); setDraftAnswer(""); }}
+                                className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : q.answer ? (
+                          <div className="rounded-md bg-emerald-500/5 border border-emerald-500/10 px-3 py-2 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                                SME Answer
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setEditingAnswerId(q.id);
+                                  setDraftAnswer(q.answer || "");
+                                }}
+                                className="text-[10px] font-medium text-primary hover:underline"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                            <p className="text-xs leading-relaxed text-foreground">
+                              {q.answer}
+                            </p>
+                            {q.answeredAt && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(q.answeredAt).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingAnswerId(q.id);
+                              setDraftAnswer("");
+                            }}
+                            className="flex w-full items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/20 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground hover:border-primary/30 hover:text-primary transition-colors"
+                          >
+                            <MessageSquare className="h-3 w-3" />
+                            Record SME answer...
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {smeQuestions.length === 0 && (
+                <div className="border-t border-primary/10 px-3 py-4 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Click "Generate Questions" to create domain-specific questions based on the screening results.
+                    The AI will analyze the job posting and tailor questions to draw out the SME's relevance logic.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Conversation log */}
             {smeSessionNotes.length > 0 && (
@@ -2144,10 +2120,6 @@ export function ResultsDashboard({
                         }}
                         roleNotes={roleNotes}
                         onRoleNoteChange={onRoleNoteChange}
-                        smeQuestions={smeQuestions}
-                        onQuestionAnswer={onQuestionAnswer}
-                        onGenerateQuestions={onGenerateQuestions}
-                        isGeneratingQuestions={isGeneratingQuestions}
                       />
                     )}
                   </tbody>
