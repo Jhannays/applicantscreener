@@ -33,45 +33,67 @@ HEALTHCARE/RN SCREENING RULES (APPLY TO ALL HEALTHCARE AND NURSING ROLES):
 
    Role-Specific Rules:
    - RN Roles: Count only post-licensure RN experience toward required RN years. Do NOT count student nurse roles or pre-licensure healthcare roles. Pre-RN healthcare exposure may provide context but does not count toward RN experience requirements.
-   - PCT / MA / Paramedic / Unit Secretary Roles: Telemetry tech, paramedic, or home health roles only count if hands-on duties align with requisition requirements. Specialized areas (e.g., OBGYN MA) are relevant if core tasks match required responsibilities.
+   - LVN Experience (for RN roles): Include as relevant experience by default, but CLEARLY IDENTIFY it in the output for recruiter visibility. Do not hide LVN time within total RN years.
+   - PCT / MA / Paramedic / Unit Secretary Roles: Telemetry tech, paramedic, or home health roles only count if hands-on duties align with requisition requirements. Specialized areas (e.g., OBGYN MA) are relevant if core tasks match required responsibilities. Do NOT automatically assume equivalency across different healthcare titles unless criteria are clearly met.
    - Finance Roles: Count all relevant finance and decision-support experience. If finance scope is unclear, flag for review instead of forcing qualification or rejection.
    - Administrative Healthcare Roles: Count as relevant if duties align with patient care support, medical documentation, or clinical support functions.
 
-2. PAID VS. UNPAID EXPERIENCE:
+2. INTERNSHIPS, TRAINING PROGRAMS & STRUCTURED CLINICAL EXPERIENCE:
+   The following experience types should be INCLUDED as relevant experience BUT MUST be EXPLICITLY CALLED OUT in the screening output so recruiters can review and investigate further:
+   - Residency
+   - Apprenticeship
+   - Fellowship
+   - Internship
+   - Externship
+   - Post Graduate Year (PGY)
+   - Trainee
+   - Cohort programs
+   - LVN experience (for RN roles only)
+   
+   IMPORTANT: These should NOT be hidden within total years without visibility. Always surface them separately in the output.
+
+3. PAID VS. UNPAID EXPERIENCE:
    - Only paid roles count toward required years of experience
    - Do NOT count: Volunteer roles, Unpaid externships
    - Paid internships may count if duties align
    - Unpaid internships do not count unless explicitly confirmed otherwise
+   - Volunteer experience does NOT count toward required totals
 
-3. CERTIFICATION HANDLING:
+4. CERTIFICATION HANDLING:
    UPON HIRE / AFTER HIRE CERTIFICATIONS:
    - Do NOT automatically reject candidates for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
    - Common certifications often obtained upon/after hire include: BLS, ACLS, PALS, NRP, and facility-specific certifications
    - If a job posting states a certification is required "upon hire" or "within X days/months", treat candidates WITHOUT that certification as still eligible
-   - If experience strongly implies certification but it is not explicitly listed: Flag for manual review instead of auto-disqualifying
+   
+   IMPLIED CERTIFICATIONS:
+   - If experience strongly implies certification but it is not explicitly listed on the resume: Flag for manual review instead of auto-disqualifying
+   - Example: A candidate with 5 years ICU RN experience likely has BLS/ACLS even if not listed
+   
    - Candidates already holding preferred certifications may rank higher
 
-4. PREFERRED VS. MINIMUM QUALIFICATIONS:
+5. PREFERRED VS. MINIMUM QUALIFICATIONS:
    - Minimum qualifications = eligibility (pass/fail)
    - Preferred qualifications = ranking only
    - Do NOT disqualify candidates for missing preferred criteria
    - In nursing roles, use preferred qualifications to funnel and prioritize
 
-5. RECENCY CONSIDERATIONS:
+6. RECENCY CONSIDERATIONS:
    - For PRN and certain healthcare roles, prioritize recent, direct healthcare experience
    - Recency may influence ranking but does NOT override minimum requirements unless specified
 
-6. EXPERIENCE VALIDATION & TRANSPARENCY:
+7. EXPERIENCE VALIDATION & TRANSPARENCY:
    - Use employment dates to calculate total years accurately, identify gaps, and prevent overstated cumulative experience
    - If duties are missing and only title is listed: Use title cautiously and flag for review when unclear
-   - If multiple resumes are uploaded: Consider risk of missing education/certification data and flag inconsistencies when detected
+   - If multiple resumes are uploaded: Be aware that relying only on the most recent version may omit key information (education/certifications). Flag inconsistencies when detected.
+   - When required information is incomplete or inconsistent, apply "Flag for Further Review"
 
-7. AMBIGUITY & CONSERVATIVE HANDLING:
-   When relevance cannot be confidently determined due to:
+8. AMBIGUITY & CONSERVATIVE HANDLING:
+   When relevance or qualification cannot be confidently determined due to:
    - Missing duties
    - Implied but unlisted certifications
-   - Borderline alignment
+   - Borderline experience alignment
    - Incomplete documentation
+   - Resume inconsistencies
    → Apply "Flag for Further Review" rather than automatic rejection
    The goal is to reduce false negatives while maintaining qualification integrity.
 `;
