@@ -19,11 +19,11 @@ import {
   formatMonthYear,
 } from "@/lib/date-utils";
 
-// ─── RN Experience Guide Rules ────────────────────────────
-// These rules are injected into AI prompts for healthcare/RN screening
+// ─── Screening Logic Rules ────────────────────────────────
+// These rules are injected into AI prompts for candidate screening relevancy logic
 
-const RN_EXPERIENCE_GUIDE = `
-HEALTHCARE/RN SCREENING RULES (APPLY TO ALL HEALTHCARE AND NURSING ROLES):
+const SCREENING_LOGIC_RULES = `
+SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
 
 1. EXPERIENCE RELEVANCE LOGIC:
    Task-Based Evaluation:
@@ -239,7 +239,7 @@ STRICT RULES:
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
 - "Relevant" means the daily duties align with what the job posting explicitly describes.
 - Do NOT reward or penalize based on inferred requirements -- only what the posting states.
-${RN_EXPERIENCE_GUIDE}
+${SCREENING_LOGIC_RULES}
 ${correctionRulesForRelevance}
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -462,7 +462,7 @@ ${reqList}
 
 ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
 ${jobQualificationsText}
-${RN_EXPERIENCE_GUIDE}
+${SCREENING_LOGIC_RULES}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
@@ -508,7 +508,7 @@ CRITICAL RULES:
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
-${RN_EXPERIENCE_GUIDE}
+${SCREENING_LOGIC_RULES}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
