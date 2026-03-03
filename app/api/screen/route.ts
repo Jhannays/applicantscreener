@@ -25,47 +25,55 @@ import {
 const RN_EXPERIENCE_GUIDE = `
 HEALTHCARE/RN SCREENING RULES (APPLY TO ALL HEALTHCARE AND NURSING ROLES):
 
-1. RN EXPERIENCE COUNTING:
-   - Count only POST-LICENSURE RN experience toward required RN years
-   - Do NOT count: Student nurse roles, Pre-licensure healthcare roles
-   - LVN experience (for RN roles) should be included as relevant experience but CLEARLY IDENTIFIED for recruiter visibility
-   - Do NOT count: PCT / MA / Paramedic / Unit Secretary roles as RN experience
-   - Evaluate non-RN healthcare experience based on alignment with requisition requirements
-   - Do NOT automatically assume equivalency across different healthcare titles
+1. EXPERIENCE RELEVANCE LOGIC:
+   Task-Based Evaluation:
+   - Determine relevance based on duties performed, not job title alone
+   - Compare resume duties directly to job description requirements
+   - If duties align with required responsibilities, count the role as relevant — even if the job title differs (e.g., home health vs. hospital titles)
 
-2. INTERNSHIPS, TRAINING PROGRAMS & STRUCTURED CLINICAL EXPERIENCE:
-   Include the following as relevant experience BUT EXPLICITLY CALL THEM OUT in the output:
-   - Residency, Apprenticeship, Fellowship, Internship, Externship
-   - Post Graduate Year (PGY), Trainee, Cohort programs
-   - LVN experience (for RN roles only)
-   These MUST be visible in the screening output so recruiters can investigate further.
+   Role-Specific Rules:
+   - RN Roles: Count only post-licensure RN experience toward required RN years. Do NOT count student nurse roles or pre-licensure healthcare roles. Pre-RN healthcare exposure may provide context but does not count toward RN experience requirements.
+   - PCT / MA / Paramedic / Unit Secretary Roles: Telemetry tech, paramedic, or home health roles only count if hands-on duties align with requisition requirements. Specialized areas (e.g., OBGYN MA) are relevant if core tasks match required responsibilities.
+   - Finance Roles: Count all relevant finance and decision-support experience. If finance scope is unclear, flag for review instead of forcing qualification or rejection.
+   - Administrative Healthcare Roles: Count as relevant if duties align with patient care support, medical documentation, or clinical support functions.
 
-3. PAID VS. VOLUNTEER EXPERIENCE:
-   - Volunteer experience does NOT count toward required years
-   - Only qualifying professional experience counts toward required totals
+2. PAID VS. UNPAID EXPERIENCE:
+   - Only paid roles count toward required years of experience
+   - Do NOT count: Volunteer roles, Unpaid externships
+   - Paid internships may count if duties align
+   - Unpaid internships do not count unless explicitly confirmed otherwise
 
-4. CERTIFICATION HANDLING:
-   - Do NOT automatically reject for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
-   - If required certification is not listed but experience strongly suggests qualification, apply "Flag for Further Review" instead of automatic disqualification
+3. CERTIFICATION HANDLING:
+   UPON HIRE / AFTER HIRE CERTIFICATIONS:
+   - Do NOT automatically reject candidates for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
+   - Common certifications often obtained upon/after hire include: BLS, ACLS, PALS, NRP, and facility-specific certifications
+   - If a job posting states a certification is required "upon hire" or "within X days/months", treat candidates WITHOUT that certification as still eligible
+   - If experience strongly implies certification but it is not explicitly listed: Flag for manual review instead of auto-disqualifying
    - Candidates already holding preferred certifications may rank higher
 
-5. PREFERRED VS. MINIMUM QUALIFICATIONS:
+4. PREFERRED VS. MINIMUM QUALIFICATIONS:
    - Minimum qualifications = eligibility (pass/fail)
-   - Preferred qualifications = ranking only (do NOT disqualify for missing preferred criteria)
-   - In nursing roles, preferred qualifications help funnel and prioritize candidates
+   - Preferred qualifications = ranking only
+   - Do NOT disqualify candidates for missing preferred criteria
+   - In nursing roles, use preferred qualifications to funnel and prioritize
 
-6. RECENCY CONSIDERATIONS:
-   - For PRN and similar healthcare roles, prioritize recent and direct healthcare experience
-   - Recency may influence ranking but does NOT override minimum requirements unless explicitly stated
+5. RECENCY CONSIDERATIONS:
+   - For PRN and certain healthcare roles, prioritize recent, direct healthcare experience
+   - Recency may influence ranking but does NOT override minimum requirements unless specified
 
-7. EXPERIENCE VALIDATION:
+6. EXPERIENCE VALIDATION & TRANSPARENCY:
    - Use employment dates to calculate total years accurately, identify gaps, and prevent overstated cumulative experience
-   - If multiple resumes are uploaded, be aware that the most recent version may omit key information (education/certifications)
-   - When required information is incomplete or inconsistent, apply "Flag for Further Review"
+   - If duties are missing and only title is listed: Use title cautiously and flag for review when unclear
+   - If multiple resumes are uploaded: Consider risk of missing education/certification data and flag inconsistencies when detected
 
-8. AMBIGUITY & CONSERVATIVE HANDLING:
-   When qualification cannot be confidently determined due to missing certifications, borderline experience, incomplete documentation, or resume inconsistencies:
+7. AMBIGUITY & CONSERVATIVE HANDLING:
+   When relevance cannot be confidently determined due to:
+   - Missing duties
+   - Implied but unlisted certifications
+   - Borderline alignment
+   - Incomplete documentation
    → Apply "Flag for Further Review" rather than automatic rejection
+   The goal is to reduce false negatives while maintaining qualification integrity.
 `;
 
 // ─── Schemas ──────────────────────────────────────────────

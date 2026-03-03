@@ -619,8 +619,9 @@ export function ResultsDashboard({
     };
 
     for (const r of results) {
+      // Show real candidate names instead of anonymized labels
       if (!nameToLabel.has(r.candidateName)) {
-        nameToLabel.set(r.candidateName, `Candidate ${toLetter(nameCounter++)}`);
+        nameToLabel.set(r.candidateName, r.candidateName);
       }
       if (!fileToLabel.has(r.resumeFile)) {
         fileToLabel.set(r.resumeFile, `Resume-${toLetter(fileCounter++)}.pdf`);
