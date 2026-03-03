@@ -116,7 +116,7 @@ const expectationsSchema = z.object({
   checks: z.array(
     z.object({
       expectation: z.string(),
-      category: z.enum(["minimum", "preferred"]),
+      category: z.enum(["minimum", "preferred", "upon_hire", "after_hire"]),
       status: z.enum(["Met", "Partially Met", "Not Evident"]),
       evidence: z.string(),
     })
@@ -252,8 +252,24 @@ For each role you MUST return:
 
 function buildStructuredRequirements(
   csvRow: RequisitionCSVRow
-): { category: "minimum" | "preferred"; text: string }[] {
-  const reqs: { category: "minimum" | "preferred"; text: string }[] = [];
+): { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] {
+  const reqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] = [];
+  
+  // Helper to detect upon_hire / after_hire certifications
+  const categorizeRequirement = (text: string): "minimum" | "upon_hire" | "after_hire" => {
+    const lower = text.toLowerCase();
+    // Check for "upon hire" patterns
+    if (lower.includes("upon hire") || lower.includes("at hire") || lower.includes("at time of hire")) {
+      return "upon_hire";
+    }
+    // Check for "after hire" / "within X days/months/years" patterns
+    if (lower.includes("after hire") || lower.includes("within") || 
+        /within\s+\d+\s*(day|week|month|year)/i.test(text) ||
+        lower.includes("during orientation") || lower.includes("post-hire")) {
+      return "after_hire";
+    }
+    return "minimum";
+  };
 
   // Minimum experience
   if (csvRow.minYearsExperience) {
@@ -272,12 +288,14 @@ function buildStructuredRequirements(
   }
 
   // Required certifications (may be comma-separated list)
+  // Detect "upon hire" / "after hire" patterns to categorize appropriately
   if (csvRow.certificationsRequired) {
     for (const cert of csvRow.certificationsRequired.split(",")) {
       const trimmed = cert.trim();
       if (trimmed) {
+        const certCategory = categorizeRequirement(trimmed);
         reqs.push({
-          category: "minimum",
+          category: certCategory,
           text: `Required certification/license: ${trimmed}`,
         });
       }
@@ -292,12 +310,13 @@ function buildStructuredRequirements(
         // Avoid duplicates with certificationsRequired
         const alreadyHas = reqs.some(
           (r) =>
-            r.category === "minimum" &&
+            (r.category === "minimum" || r.category === "upon_hire" || r.category === "after_hire") &&
             r.text.toLowerCase().includes(trimmed.toLowerCase())
         );
         if (!alreadyHas) {
+          const certCategory = categorizeRequirement(trimmed);
           reqs.push({
-            category: "minimum",
+            category: certCategory,
             text: `Required certification: ${trimmed}`,
           });
         }
@@ -393,7 +412,7 @@ function buildStructuredRequirements(
 
 async function evaluateExpectationsStructured(
   resumeText: string,
-  structuredReqs: { category: "minimum" | "preferred"; text: string }[],
+  structuredReqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[],
   jobQualificationsText: string,
   correctionRulesForExpectations: string = ""
 ): Promise<ExpectationCheck[]> {
@@ -410,7 +429,11 @@ async function evaluateExpectationsStructured(
     prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
 The following requirements have been pre-categorized from the employer's structured requisition data.
-Each requirement is labeled as either [MINIMUM] (required/must-have) or [PREFERRED] (nice-to-have).
+Each requirement is labeled with one of the following categories:
+- [MINIMUM] = required/must-have (determines eligibility)
+- [PREFERRED] = nice-to-have (ranking only, does not disqualify)
+- [UPON_HIRE] = certification/requirement expected at start of employment (does NOT disqualify candidates who don't have it yet)
+- [AFTER_HIRE] = certification/requirement to be obtained within X days/months after hire (does NOT disqualify candidates who don't have it yet)
 
 STRUCTURED REQUIREMENTS (use these EXACT requirements and categories -- do NOT add, remove, or re-categorize):
 ${reqList}
@@ -428,7 +451,8 @@ For EACH numbered requirement above, evaluate the resume:
 - "Not Evident" = no evidence found in the resume
 
 IMPORTANT:
-- Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred").
+- Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred", [UPON_HIRE] -> "upon_hire", [AFTER_HIRE] -> "after_hire").
+- For UPON_HIRE and AFTER_HIRE requirements: These are informational. Candidates WITHOUT these certifications are STILL ELIGIBLE. Mark "Met" if they have it, "Not Evident" if they don't, but this does NOT disqualify them.
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
 - For "Partially Met": Describe what the resume shows AND what gap remains.
 - For "Not Evident": Leave evidence as empty string.
@@ -451,11 +475,14 @@ async function evaluateExpectations(
 
 CRITICAL RULES:
 1. ONLY evaluate against requirements that are EXPLICITLY STATED in the job posting below. Do NOT infer, assume, or add requirements that are not written in the posting.
-2. Classify each requirement as either "minimum" or "preferred":
+2. Classify each requirement into one of these categories:
    - "minimum" = the posting says "required", "must have", "minimum", "mandatory", or lists it as a basic qualification
    - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications
+   - "upon_hire" = certifications/requirements that say "upon hire", "at hire", "at time of hire" -- candidate can obtain at start
+   - "after_hire" = certifications/requirements that say "within X days/months", "after hire", "during orientation", "post-hire" -- candidate can obtain after starting
    - If the posting does not clearly distinguish, treat it as "minimum" by default.
-3. A candidate must NOT be penalized for missing a "preferred" requirement. Only "minimum" requirements affect the core evaluation.
+3. A candidate must NOT be penalized for missing a "preferred", "upon_hire", or "after_hire" requirement. Only "minimum" requirements affect the core evaluation.
+4. Common certifications like BLS, ACLS, PALS, NRP are often "upon_hire" or "after_hire" in healthcare roles -- check the posting language carefully.
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
@@ -474,6 +501,7 @@ IMPORTANT:
 - For "Partially Met": Describe what the resume shows AND what gap remains.
 - For "Not Evident": Leave evidence as empty string.
 - Do NOT fabricate requirements. Every expectation you return must be traceable to specific text in the job posting.
+- For UPON_HIRE and AFTER_HIRE categories: "Not Evident" does NOT disqualify the candidate.
 
 Return all requirements found in the posting (typically 8-20).`,
   });

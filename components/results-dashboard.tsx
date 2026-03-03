@@ -86,6 +86,8 @@ function ExpectationsTable({
 }) {
   const minimumChecks = checks.filter((c) => c.category === "minimum");
   const preferredChecks = checks.filter((c) => c.category === "preferred");
+  const uponHireChecks = checks.filter((c) => c.category === "upon_hire");
+  const afterHireChecks = checks.filter((c) => c.category === "after_hire");
   // Fallback for old data that may not have category
   const uncategorized = checks.filter((c) => !c.category);
 
@@ -169,6 +171,36 @@ function ExpectationsTable({
                 </td>
               </tr>
               {renderRows(preferredChecks)}
+            </>
+          )}
+          {uponHireChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-amber-500/10 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+                    Upon Hire Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (expected at start -- does not disqualify)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(uponHireChecks)}
+            </>
+          )}
+          {afterHireChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-teal-500/10 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-teal-700">
+                    After Hire Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (within X months -- does not disqualify)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(afterHireChecks)}
             </>
           )}
           {uncategorized.length > 0 && renderRows(uncategorized)}

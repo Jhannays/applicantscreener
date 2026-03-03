@@ -108,8 +108,8 @@ export interface RoleRelevance {
 
 export interface ExpectationCheck {
   expectation: string;
-  /** Whether this requirement is a minimum (must-have) or preferred (nice-to-have) */
-  category: "minimum" | "preferred";
+  /** Whether this requirement is a minimum (must-have), preferred (nice-to-have), upon_hire (obtained at start), or after_hire (obtained within X months) */
+  category: "minimum" | "preferred" | "upon_hire" | "after_hire";
   status: "Met" | "Partially Met" | "Not Evident";
   evidence: string;
   /** true when a human reviewer has overridden the AI's status determination */
