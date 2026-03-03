@@ -155,7 +155,60 @@ CRITICAL: Only compare against requirements that are EXPLICITLY STATED in the jo
 
 A role is relevant ONLY if the work performed directly relates to skills, domain, or experience EXPLICITLY listed in the job posting.
 
-STRICT RULES:
+═══════════════════════════════════════════════════════════════════
+DOMAIN-SPECIFIC RELEVANCE RULES
+═══════════════════════════════════════════════════════════════════
+
+1. RN (Registered Nurse) ROLES:
+   • Count ONLY post-licensure RN experience toward required RN years
+   • Do NOT count: Student nurse roles, Pre-licensure healthcare roles
+   • LVN experience: Include as relevant experience by default, but CLEARLY FLAG IT for recruiter visibility (e.g., "LVN experience - 2 years - flagged for review")
+   • The reason field MUST distinguish between RN and LVN experience
+
+2. PCT / MA / PARAMEDIC / UNIT SECRETARY ROLES:
+   • Evaluate based on alignment with requisition requirements
+   • Do NOT automatically assume equivalency across different healthcare titles
+   • Only mark relevant if duties specifically match what the posting requires
+
+3. FINANCE ROLES:
+   • Count all relevant finance and decision-support experience
+   • If finance scope is unclear, the role should still be marked as relevant but FLAGGED for recruiter review in the reason
+
+4. ADMINISTRATIVE HEALTHCARE ROLES:
+   • May count toward required experience IF aligned with requisition scope
+   • Generic admin experience is NOT relevant unless posting explicitly requests it
+
+═══════════════════════════════════════════════════════════════════
+INTERNSHIPS, TRAINING PROGRAMS & STRUCTURED CLINICAL EXPERIENCE
+═══════════════════════════════════════════════════════════════════
+
+The following experience types should be INCLUDED as relevant experience by default:
+   • Residency, Apprenticeship, Fellowship, Internship, Externship
+   • Post Graduate Year (PGY), Trainee, Cohort
+   • LVN experience (for RN roles only)
+
+IMPORTANT: These experiences MUST be explicitly called out in the reason field so recruiters can review and investigate further. Example: "Relevant - includes 1-year RN Residency program (flagged for recruiter visibility)"
+
+═══════════════════════════════════════════════════════════════════
+PAID VS. VOLUNTEER EXPERIENCE
+═══════════════════════════════════════════════════════════════════
+
+• Volunteer experience does NOT count toward required years of experience
+• Mark volunteer roles as NOT RELEVANT for experience calculation purposes
+• In the reason, note: "Volunteer experience - does not count toward required years"
+
+═══════════════════════════════════════════════════════════════════
+RECENCY CONSIDERATIONS
+═══════════════════════════════════════════════════════════════════
+
+• For PRN and similar healthcare roles, prioritize recent and direct healthcare experience
+• Recency may influence ranking but does NOT override minimum requirements unless explicitly stated
+• Note in the reason if experience is dated (e.g., "Relevant but experience is from 5+ years ago")
+
+═══════════════════════════════════════════════════════════════════
+GENERAL STRICT RULES
+═══════════════════════════════════════════════════════════════════
+
 - If the job posting asks for healthcare/nursing experience, a daycare or food-service role is NOT relevant.
 - If the job posting asks for software engineering, a retail role is NOT relevant.
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
@@ -174,8 +227,10 @@ For each role you MUST return:
   1. Names the specific job requirement(s) the role does or does not match
   2. References specific duties or bullets from the role
   3. Explains the connection or mismatch clearly
+  4. FLAGS any special experience types (LVN, Residency, Internship, Volunteer, dated experience) for recruiter visibility
   Example GOOD reason: "This role involved direct patient care including medication administration and vitals monitoring, which aligns with the RN clinical experience requirement. The charge nurse duties also satisfy the leadership expectation."
-  Example GOOD reason: "While this role involved working with children, the duties (lesson planning, classroom management) do not align with the clinical nursing, patient assessment, or medical documentation requirements of this position."`,
+  Example GOOD reason: "While this role involved working with children, the duties (lesson planning, classroom management) do not align with the clinical nursing, patient assessment, or medical documentation requirements of this position."
+  Example GOOD reason: "LVN experience (2 years) - relevant to RN posting but flagged for recruiter review as it is pre-RN licensure experience."`,
   });
   return (
     (
@@ -361,13 +416,55 @@ ${reqList}
 ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
 ${jobQualificationsText}
 ${correctionRulesForExpectations}
+
+═══════════════════════════════════════════════════════════════════
+CERTIFICATION HANDLING RULES
+═══════════════════════════════════════════════════════════════════
+
+• Do NOT automatically reject candidates for certifications listed as:
+  - "Upon hire" or "Obtain upon hire"
+  - "Within X months/years"
+  - Typically obtained during orientation (BLS, ACLS for new grad nurses, etc.)
+• If required certification is not listed BUT experience strongly suggests qualification:
+  - Mark as "Partially Met" with evidence noting "FLAG FOR FURTHER REVIEW - certification not listed but experience suggests likely qualification"
+• Candidates already holding preferred certifications may be noted positively in evidence
+
+═══════════════════════════════════════════════════════════════════
+PREFERRED VS. MINIMUM QUALIFICATIONS
+═══════════════════════════════════════════════════════════════════
+
+• MINIMUM qualifications = eligibility (pass/fail threshold)
+• PREFERRED qualifications = ranking only (helps prioritize but NEVER disqualifies)
+• Do NOT mark "Not Evident" as a negative for preferred criteria -- it simply means no bonus
+• In nursing roles, preferred qualifications help funnel and prioritize candidates
+
+═══════════════════════════════════════════════════════════════════
+EXPERIENCE VALIDATION
+═══════════════════════════════════════════════════════════════════
+
+• Use employment dates to:
+  - Calculate total years accurately
+  - Identify gaps
+  - Prevent overstated cumulative experience
+• When required information is incomplete or inconsistent:
+  - Mark as "Partially Met" with "FLAG FOR FURTHER REVIEW" in evidence
+
+═══════════════════════════════════════════════════════════════════
+AMBIGUITY & CONSERVATIVE HANDLING
+═══════════════════════════════════════════════════════════════════
+
+When qualification cannot be confidently determined due to:
+• Missing certifications, Borderline experience, Incomplete documentation, Resume inconsistencies
+→ Mark as "Partially Met" with "FLAG FOR FURTHER REVIEW" rather than "Not Evident"
+→ Include in evidence: what IS present and what remains unclear
+
 RESUME TEXT:
 ${resumeText}
 
 For EACH numbered requirement above, evaluate the resume:
 - "Met" = clear, direct evidence in the resume
-- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
-- "Not Evident" = no evidence found in the resume
+- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing), OR ambiguous cases that need recruiter review
+- "Not Evident" = no evidence found in the resume AND no reasonable inference possible
 
 TIMING CLASSIFICATION -- for each requirement, determine WHEN it must be fulfilled:
 - "upon_hire" = the candidate MUST have this at the time of hire (e.g. active licenses, required degrees, minimum years of experience, mandatory certifications that cannot be obtained after starting)
@@ -379,8 +476,8 @@ Look for language clues: "must have upon hire", "required at time of appointment
 IMPORTANT:
 - Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred").
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
-- For "Partially Met": Describe what the resume shows AND what gap remains.
-- For "Not Evident": Leave evidence as empty string.
+- For "Partially Met": Describe what the resume shows AND what gap remains. Include "FLAG FOR FURTHER REVIEW" for ambiguous cases.
+- For "Not Evident": Leave evidence as empty string. Use sparingly -- prefer "Partially Met" with flag when there's any doubt.
 - Return exactly ${structuredReqs.length} checks, one per requirement.`,
   });
   return (output as { checks: ExpectationCheck[] })?.checks || [];
@@ -409,13 +506,55 @@ CRITICAL RULES:
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
 ${correctionRulesForExpectations}
+
+═══════════════════════════════════════════════════════════════════
+CERTIFICATION HANDLING RULES
+═══════════════════════════════════════════════════════════════════
+
+• Do NOT automatically reject candidates for certifications listed as:
+  - "Upon hire" or "Obtain upon hire"
+  - "Within X months/years"
+  - Typically obtained during orientation (BLS, ACLS for new grad nurses, etc.)
+• If required certification is not listed BUT experience strongly suggests qualification:
+  - Mark as "Partially Met" with evidence noting "FLAG FOR FURTHER REVIEW - certification not listed but experience suggests likely qualification"
+• Candidates already holding preferred certifications may be noted positively in evidence
+
+═══════════════════════════════════════════════════════════════════
+PREFERRED VS. MINIMUM QUALIFICATIONS
+═══════════════════════════════════════════════════════════════════
+
+• MINIMUM qualifications = eligibility (pass/fail threshold)
+• PREFERRED qualifications = ranking only (helps prioritize but NEVER disqualifies)
+• Do NOT mark "Not Evident" as a negative for preferred criteria -- it simply means no bonus
+• In nursing roles, preferred qualifications help funnel and prioritize candidates
+
+═══════════════════════════════════════════════════════════════════
+EXPERIENCE VALIDATION
+═══════════════════════════════════════════════════════════════════
+
+• Use employment dates to:
+  - Calculate total years accurately
+  - Identify gaps
+  - Prevent overstated cumulative experience
+• When required information is incomplete or inconsistent:
+  - Mark as "Partially Met" with "FLAG FOR FURTHER REVIEW" in evidence
+
+═══════════════════════════════════════════════════════════════════
+AMBIGUITY & CONSERVATIVE HANDLING
+═══════════════════════════════════════════════════════════════════
+
+When qualification cannot be confidently determined due to:
+• Missing certifications, Borderline experience, Incomplete documentation, Resume inconsistencies
+→ Mark as "Partially Met" with "FLAG FOR FURTHER REVIEW" rather than "Not Evident"
+→ Include in evidence: what IS present and what remains unclear
+
 RESUME TEXT:
 ${resumeText}
 
 For each requirement found in the job posting:
 - "Met" = clear, direct evidence in the resume
-- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing)
-- "Not Evident" = no evidence found in the resume
+- "Partially Met" = some related evidence but not a full match (explain what is present AND what is missing), OR ambiguous cases that need recruiter review
+- "Not Evident" = no evidence found in the resume AND no reasonable inference possible
 
 TIMING CLASSIFICATION -- for each requirement, determine WHEN it must be fulfilled:
 - "upon_hire" = the candidate MUST have this at the time of hire (e.g. active licenses, required degrees, minimum years of experience, mandatory certifications that cannot be obtained after starting)
@@ -426,8 +565,8 @@ Look for language clues: "must have upon hire", "required at time of appointment
 
 IMPORTANT:
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
-- For "Partially Met": Describe what the resume shows AND what gap remains.
-- For "Not Evident": Leave evidence as empty string.
+- For "Partially Met": Describe what the resume shows AND what gap remains. Include "FLAG FOR FURTHER REVIEW" for ambiguous cases.
+- For "Not Evident": Leave evidence as empty string. Use sparingly -- prefer "Partially Met" with flag when there's any doubt.
 - Do NOT fabricate requirements. Every expectation you return must be traceable to specific text in the job posting.
 
 Return all requirements found in the posting (typically 8-20).`,
