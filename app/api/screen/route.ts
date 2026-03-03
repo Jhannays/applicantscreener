@@ -19,6 +19,55 @@ import {
   formatMonthYear,
 } from "@/lib/date-utils";
 
+// ─── RN Experience Guide Rules ────────────────────────────
+// These rules are injected into AI prompts for healthcare/RN screening
+
+const RN_EXPERIENCE_GUIDE = `
+HEALTHCARE/RN SCREENING RULES (APPLY TO ALL HEALTHCARE AND NURSING ROLES):
+
+1. RN EXPERIENCE COUNTING:
+   - Count only POST-LICENSURE RN experience toward required RN years
+   - Do NOT count: Student nurse roles, Pre-licensure healthcare roles
+   - LVN experience (for RN roles) should be included as relevant experience but CLEARLY IDENTIFIED for recruiter visibility
+   - Do NOT count: PCT / MA / Paramedic / Unit Secretary roles as RN experience
+   - Evaluate non-RN healthcare experience based on alignment with requisition requirements
+   - Do NOT automatically assume equivalency across different healthcare titles
+
+2. INTERNSHIPS, TRAINING PROGRAMS & STRUCTURED CLINICAL EXPERIENCE:
+   Include the following as relevant experience BUT EXPLICITLY CALL THEM OUT in the output:
+   - Residency, Apprenticeship, Fellowship, Internship, Externship
+   - Post Graduate Year (PGY), Trainee, Cohort programs
+   - LVN experience (for RN roles only)
+   These MUST be visible in the screening output so recruiters can investigate further.
+
+3. PAID VS. VOLUNTEER EXPERIENCE:
+   - Volunteer experience does NOT count toward required years
+   - Only qualifying professional experience counts toward required totals
+
+4. CERTIFICATION HANDLING:
+   - Do NOT automatically reject for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
+   - If required certification is not listed but experience strongly suggests qualification, apply "Flag for Further Review" instead of automatic disqualification
+   - Candidates already holding preferred certifications may rank higher
+
+5. PREFERRED VS. MINIMUM QUALIFICATIONS:
+   - Minimum qualifications = eligibility (pass/fail)
+   - Preferred qualifications = ranking only (do NOT disqualify for missing preferred criteria)
+   - In nursing roles, preferred qualifications help funnel and prioritize candidates
+
+6. RECENCY CONSIDERATIONS:
+   - For PRN and similar healthcare roles, prioritize recent and direct healthcare experience
+   - Recency may influence ranking but does NOT override minimum requirements unless explicitly stated
+
+7. EXPERIENCE VALIDATION:
+   - Use employment dates to calculate total years accurately, identify gaps, and prevent overstated cumulative experience
+   - If multiple resumes are uploaded, be aware that the most recent version may omit key information (education/certifications)
+   - When required information is incomplete or inconsistent, apply "Flag for Further Review"
+
+8. AMBIGUITY & CONSERVATIVE HANDLING:
+   When qualification cannot be confidently determined due to missing certifications, borderline experience, incomplete documentation, or resume inconsistencies:
+   → Apply "Flag for Further Review" rather than automatic rejection
+`;
+
 // ─── Schemas ──────────────────────────────────────────────
 
 const parsedResumeSchema = z.object({
@@ -160,6 +209,7 @@ STRICT RULES:
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
 - "Relevant" means the daily duties align with what the job posting explicitly describes.
 - Do NOT reward or penalize based on inferred requirements -- only what the posting states.
+${RN_EXPERIENCE_GUIDE}
 ${correctionRulesForRelevance}
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -359,6 +409,7 @@ ${reqList}
 
 ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
 ${jobQualificationsText}
+${RN_EXPERIENCE_GUIDE}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
@@ -400,6 +451,7 @@ CRITICAL RULES:
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
+${RN_EXPERIENCE_GUIDE}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
