@@ -29,6 +29,7 @@ import {
   FolderOpen,
   Trash2,
   Sparkles,
+  BarChart3,
 } from "lucide-react";
 import type {
   ApplicantResult,
@@ -294,6 +295,99 @@ function ApplicantExpandedRow({
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Score Breakdown */}
+          {result.scoreBreakdown && (
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h4 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <BarChart3 className="h-3.5 w-3.5" />
+                Score Breakdown
+              </h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Left side - Score visualization */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-full border-4 ${
+                      result.scoreBreakdown.finalScore >= 70
+                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                        : result.scoreBreakdown.finalScore >= 40
+                        ? "border-amber-500 bg-amber-500/10 text-amber-700"
+                        : "border-red-500 bg-red-500/10 text-red-700"
+                    }`}>
+                      <span className="text-xl font-bold">{result.scoreBreakdown.finalScore}%</span>
+                    </div>
+                    <div>
+                      <div className={`text-sm font-semibold ${
+                        result.scoreBreakdown.meetsMinimum ? "text-emerald-700" : "text-red-700"
+                      }`}>
+                        {result.scoreBreakdown.meetsMinimum ? "Meets Minimum Requirements" : "Does Not Meet Minimum Requirements"}
+                      </div>
+                      {result.scoreBreakdown.rejectionReason && (
+                        <div className="text-xs text-red-600 mt-0.5">{result.scoreBreakdown.rejectionReason}</div>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Highest Education: {result.scoreBreakdown.highestEducation}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Contribution bars */}
+                  <div className="space-y-2">
+                    {[
+                      { label: "Years Experience", value: result.scoreBreakdown.contributions.yearsExperience, detail: `${result.scoreBreakdown.details.candidateYearsExp}y${result.scoreBreakdown.details.requiredYearsExp ? ` / ${result.scoreBreakdown.details.requiredYearsExp}y req` : ""}` },
+                      { label: "Education", value: result.scoreBreakdown.contributions.education, detail: result.scoreBreakdown.details.candidateDegree },
+                      { label: "Certifications", value: result.scoreBreakdown.contributions.certifications, detail: `${result.scoreBreakdown.details.candidateCertsMatchedCount}/${result.scoreBreakdown.details.requiredCertsCount} matched` },
+                      { label: "Skills", value: result.scoreBreakdown.contributions.skills, detail: `${result.scoreBreakdown.details.skillsMatched}/${result.scoreBreakdown.details.totalSkillsRequired} matched` },
+                      { label: "Preferred Criteria", value: result.scoreBreakdown.contributions.preferredExperience, detail: `${result.scoreBreakdown.details.preferredCriteriaMetCount}/${result.scoreBreakdown.details.preferredCriteriaCount} met` },
+                    ].map(({ label, value, detail }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="w-28 text-xs text-muted-foreground">{label}</span>
+                        <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+                              value >= 0.9 ? "bg-emerald-500" : value >= 0.7 ? "bg-amber-500" : value >= 0.5 ? "bg-orange-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${value * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-20 text-right text-xs text-muted-foreground">{detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Right side - Details */}
+                <div className="space-y-2 text-xs">
+                  <div className="rounded-md bg-muted/50 p-2">
+                    <div className="font-medium text-muted-foreground mb-1">Scoring Method</div>
+                    <div className="text-foreground">
+                      Base 50% for meeting all minimum requirements + remaining 50% distributed by preferred criteria match
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Required Exp</div>
+                      <div className="font-semibold text-foreground">
+                        {result.scoreBreakdown.details.requiredYearsExp ? `${result.scoreBreakdown.details.requiredYearsExp} years` : "Not specified"}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Candidate Exp</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.candidateYearsExp} years</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Required Degree</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.requiredDegree || "Not specified"}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Candidate Degree</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.candidateDegree}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -907,6 +1001,10 @@ export function ResultsDashboard({
           return (
             dir * (a.keyRequirementsMetCount - b.keyRequirementsMetCount)
           );
+        case "score":
+          return (
+            dir * ((a.scoreBreakdown?.finalScore || 0) - (b.scoreBreakdown?.finalScore || 0))
+          );
         default:
           return 0;
       }
@@ -950,9 +1048,10 @@ export function ResultsDashboard({
       "Education",
       "Skills",
       "Relevant Years of Experience",
-      "Certifications",
-      "Overall Match",
-      "Gap Present? (Y/N)",
+    "Certifications",
+    "Score",
+    "Overall Match",
+    "Gap Present? (Y/N)",
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
       "Relevance Reasoning",
@@ -987,6 +1086,7 @@ export function ResultsDashboard({
         csvEscape(skillsStr || "N/A"),
         csvEscape(yoeStr),
         csvEscape(certsStr || "N/A"),
+        `${r.scoreBreakdown?.finalScore || 0}%`,
         csvEscape(r.overallMatch),
         gapPresent,
         nonRelevant,
@@ -1063,9 +1163,11 @@ export function ResultsDashboard({
     results.forEach((r) => {
       md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${getDisplayFile(r.resumeFile)}\n\n`;
-      md += `**Overall Match:** ${r.overallMatch}\n`;
-      md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
-      md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n\n`;
+    md += `**Overall Match:** ${r.overallMatch} (Score: ${r.scoreBreakdown?.finalScore || 0}%)\n`;
+    md += `**Meets Minimum:** ${r.scoreBreakdown?.meetsMinimum ? "Yes" : "No"}${r.scoreBreakdown?.rejectionReason ? ` - ${r.scoreBreakdown.rejectionReason}` : ""}\n`;
+    md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
+    md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n`;
+    md += `**Highest Education:** ${r.scoreBreakdown?.highestEducation || "Not specified"}\n\n`;
 
       if (r.screeningRationale) {
         md += "### Screening Rationale\n\n";
@@ -1893,6 +1995,9 @@ export function ResultsDashboard({
                   </span>
                 </th>
                 <th className="px-3 py-3 text-left">
+                  <SortButton label="Score" sortKeyName="score" />
+                </th>
+                <th className="px-3 py-3 text-left">
                   <SortButton label="Match" sortKeyName="match" />
                 </th>
               </tr>
@@ -1991,6 +2096,31 @@ export function ResultsDashboard({
                         >
                           {result.isEdgeCase ? "Y" : "N"}
                         </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="relative h-2 w-16 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+                                (result.scoreBreakdown?.finalScore || 0) >= 70
+                                  ? "bg-emerald-500"
+                                  : (result.scoreBreakdown?.finalScore || 0) >= 40
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                              }`}
+                              style={{ width: `${result.scoreBreakdown?.finalScore || 0}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            (result.scoreBreakdown?.finalScore || 0) >= 70
+                              ? "text-emerald-700"
+                              : (result.scoreBreakdown?.finalScore || 0) >= 40
+                              ? "text-amber-700"
+                              : "text-red-700"
+                          }`}>
+                            {result.scoreBreakdown?.finalScore || 0}%
+                          </span>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <span

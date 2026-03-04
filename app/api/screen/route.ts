@@ -11,6 +11,7 @@ import type {
   ParsedResume,
   WorkExperience,
   RequisitionCSVRow,
+  ScoreBreakdown,
 } from "@/lib/types";
 import {
   parseMonthYear,
@@ -652,51 +653,308 @@ function computeExperience(
   };
 }
 
-// ─── Overall match ────────────────────────────────────────
+// ─── Education Level Ranking ──────────────────────────────
+
+const EDUCATION_LEVELS: Record<string, number> = {
+  "high school": 1,
+  "ged": 1,
+  "diploma": 1,
+  "certificate": 2,
+  "associate": 3,
+  "associates": 3,
+  "adn": 3,
+  "asn": 3,
+  "bachelor": 4,
+  "bachelors": 4,
+  "bsn": 4,
+  "bs": 4,
+  "ba": 4,
+  "master": 5,
+  "masters": 5,
+  "msn": 5,
+  "ms": 5,
+  "ma": 5,
+  "mba": 5,
+  "doctorate": 6,
+  "doctoral": 6,
+  "phd": 6,
+  "dnp": 6,
+  "md": 6,
+  "do": 6,
+  "jd": 6,
+};
+
+function getEducationLevel(degreeString: string): number {
+  const lower = degreeString.toLowerCase();
+  for (const [key, level] of Object.entries(EDUCATION_LEVELS)) {
+    if (lower.includes(key)) return level;
+  }
+  return 0;
+}
+
+function getHighestEducation(educationList: { degree: string }[]): string {
+  if (!educationList || educationList.length === 0) return "Not specified";
+  
+  let highest = educationList[0];
+  let highestLevel = getEducationLevel(highest.degree);
+  
+  for (const edu of educationList) {
+    const level = getEducationLevel(edu.degree);
+    if (level > highestLevel) {
+      highest = edu;
+      highestLevel = level;
+    }
+  }
+  
+  return highest.degree || "Not specified";
+}
+
+// ─── Overall match & Score Calculation ────────────────────
 
 function computeOverallMatch(
   expectations: ExpectationCheck[],
-  relevantMonthsTotal: number
+  relevantMonthsTotal: number,
+  parsedResume: ParsedResume,
+  csvRow?: RequisitionCSVRow
 ): {
   match: "Strong" | "Medium" | "Weak";
   metCount: number;
   missingCount: number;
   minimumScore: number;
   preferredScore: number;
+  scoreBreakdown: ScoreBreakdown;
 } {
-  // Split into minimum vs preferred
+  // Split into categories
   const minimumReqs = expectations.filter((e) => e.category === "minimum");
   const preferredReqs = expectations.filter((e) => e.category === "preferred");
-
-  // Score minimum requirements (these determine the match)
+  
+  // Overall counts
+  const metCount = expectations.filter((e) => e.status === "Met").length;
+  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
+  
+  // === SCORE CALCULATION LOGIC ===
+  // Base 50% for meeting ALL required criteria
+  // Remaining 50% distributed based on preferred criteria
+  
+  const highestEducation = getHighestEducation(parsedResume.education);
+  const candidateYearsExp = relevantMonthsTotal / 12;
+  
+  // Parse required years from CSV or expectations
+  let requiredYearsExp: number | undefined;
+  if (csvRow?.minYearsExperience) {
+    const match = csvRow.minYearsExperience.match(/(\d+)/);
+    if (match) requiredYearsExp = parseInt(match[1], 10);
+  }
+  
+  // Parse required degree from CSV or expectations
+  let requiredDegree: string | undefined;
+  if (csvRow?.educationNeeded) {
+    requiredDegree = csvRow.educationNeeded;
+  }
+  
+  // Required certifications from expectations
+  const requiredCerts = minimumReqs.filter(
+    (e) => e.expectation.toLowerCase().includes("certification") || 
+           e.expectation.toLowerCase().includes("license") ||
+           e.expectation.toLowerCase().includes("bls") ||
+           e.expectation.toLowerCase().includes("acls")
+  );
+  const requiredCertsCount = requiredCerts.length;
+  const candidateCertsMatchedCount = requiredCerts.filter(
+    (e) => e.status === "Met"
+  ).length;
+  
+  // Skills from expectations (if any skill-related requirements)
+  const skillReqs = minimumReqs.filter(
+    (e) => e.expectation.toLowerCase().includes("skill") ||
+           e.expectation.toLowerCase().includes("proficient") ||
+           e.expectation.toLowerCase().includes("experience with")
+  );
+  const totalSkillsRequired = skillReqs.length;
+  const skillsMatched = skillReqs.filter((e) => e.status === "Met").length;
+  
+  // Preferred criteria counts
+  const preferredCriteriaCount = preferredReqs.length;
+  const preferredCriteriaMetCount = preferredReqs.filter(
+    (e) => e.status === "Met" || e.status === "Partially Met"
+  ).length;
+  
+  // === CONTRIBUTION CALCULATIONS (0-1 scale) ===
+  
+  // Years of experience contribution
+  let yearsExpContribution = 0;
+  if (requiredYearsExp !== undefined && requiredYearsExp > 0) {
+    if (candidateYearsExp >= requiredYearsExp) {
+      yearsExpContribution = 1;
+    } else if (candidateYearsExp >= requiredYearsExp * 0.75) {
+      yearsExpContribution = 0.9;
+    } else if (candidateYearsExp >= requiredYearsExp * 0.5) {
+      yearsExpContribution = 0.7;
+    } else if (candidateYearsExp > 0) {
+      yearsExpContribution = 0.5;
+    }
+  } else {
+    // No required years specified, give full credit if has relevant experience
+    yearsExpContribution = candidateYearsExp > 0 ? 1 : 0.5;
+  }
+  
+  // Education contribution
+  let educationContribution = 0;
+  if (requiredDegree) {
+    const requiredLevel = getEducationLevel(requiredDegree);
+    const candidateLevel = getEducationLevel(highestEducation);
+    if (candidateLevel >= requiredLevel) {
+      educationContribution = 1;
+    } else if (candidateLevel === requiredLevel - 1) {
+      educationContribution = 0.7;
+    } else if (candidateLevel > 0) {
+      educationContribution = 0.5;
+    }
+  } else {
+    // No required degree specified
+    educationContribution = highestEducation !== "Not specified" ? 1 : 0.5;
+  }
+  
+  // Certifications contribution
+  let certsContribution = 0;
+  if (requiredCertsCount > 0) {
+    const ratio = candidateCertsMatchedCount / requiredCertsCount;
+    if (ratio >= 1) {
+      certsContribution = 1;
+    } else if (ratio >= 0.75) {
+      certsContribution = 0.9;
+    } else if (ratio >= 0.5) {
+      certsContribution = 0.7;
+    } else if (ratio > 0) {
+      certsContribution = 0.5;
+    }
+  } else {
+    // No required certs
+    certsContribution = 1;
+  }
+  
+  // Skills contribution
+  let skillsContribution = 0;
+  if (totalSkillsRequired > 0) {
+    const ratio = skillsMatched / totalSkillsRequired;
+    if (ratio >= 1) {
+      skillsContribution = 1;
+    } else if (ratio >= 0.75) {
+      skillsContribution = 0.9;
+    } else if (ratio >= 0.5) {
+      skillsContribution = 0.7;
+    } else if (ratio > 0) {
+      skillsContribution = 0.5;
+    }
+  } else {
+    // No skill requirements
+    skillsContribution = 1;
+  }
+  
+  // Preferred experience contribution
+  let preferredExpContribution = 0;
+  if (preferredCriteriaCount > 0) {
+    const ratio = preferredCriteriaMetCount / preferredCriteriaCount;
+    if (ratio >= 1) {
+      preferredExpContribution = 1;
+    } else if (ratio >= 0.75) {
+      preferredExpContribution = 0.9;
+    } else if (ratio >= 0.5) {
+      preferredExpContribution = 0.7;
+    } else if (ratio > 0) {
+      preferredExpContribution = 0.5;
+    }
+  } else {
+    preferredExpContribution = 1;
+  }
+  
+  // === DETERMINE IF MEETS MINIMUM REQUIREMENTS ===
+  // Check all minimum requirements are Met or Partially Met
+  const minimumNotEvident = minimumReqs.filter((e) => e.status === "Not Evident");
+  const meetsMinimum = minimumNotEvident.length === 0;
+  
+  // Build rejection reason if doesn't meet minimum
+  let rejectionReason: string | undefined;
+  if (!meetsMinimum) {
+    const missing = minimumNotEvident.map((e) => e.expectation).slice(0, 3);
+    rejectionReason = `Missing required: ${missing.join(", ")}${minimumNotEvident.length > 3 ? ` (+${minimumNotEvident.length - 3} more)` : ""}`;
+  }
+  
+  // === FINAL SCORE CALCULATION ===
+  // If any required criteria missing → score = 0
+  // Otherwise: 50% base + (preferred % of remaining 50%)
+  
+  let finalScore = 0;
+  if (meetsMinimum) {
+    // Base 50% for meeting all required
+    const baseScore = 50;
+    
+    // Calculate average of required contributions for the base
+    const requiredContributions = [yearsExpContribution, educationContribution, certsContribution, skillsContribution];
+    const avgRequiredContribution = requiredContributions.reduce((a, b) => a + b, 0) / requiredContributions.length;
+    
+    // Adjust base score by how well requirements are met (not just pass/fail but quality)
+    const adjustedBase = baseScore * avgRequiredContribution;
+    
+    // Remaining 50% based on preferred criteria
+    const preferredBonus = 50 * preferredExpContribution;
+    
+    finalScore = Math.round(adjustedBase + preferredBonus);
+  }
+  
+  // Ensure score is between 0-100
+  finalScore = Math.max(0, Math.min(100, finalScore));
+  
+  // === LEGACY SCORES (for backward compatibility) ===
   const minMet = minimumReqs.filter((e) => e.status === "Met").length;
   const minPartial = minimumReqs.filter((e) => e.status === "Partially Met").length;
   const minTotal = minimumReqs.length || 1;
   const minimumScore = (minMet + minPartial * 0.5) / minTotal;
-
-  // Score preferred requirements (bonus only, cannot hurt)
+  
   const prefMet = preferredReqs.filter((e) => e.status === "Met").length;
   const prefPartial = preferredReqs.filter((e) => e.status === "Partially Met").length;
   const prefTotal = preferredReqs.length || 1;
   const preferredScore = preferredReqs.length > 0
     ? (prefMet + prefPartial * 0.5) / prefTotal
     : 0;
-
-  // Overall counts (across all requirements for display)
-  const metCount = expectations.filter((e) => e.status === "Met").length;
-  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
-
-  // Match is determined ONLY by minimum requirements + relevant experience
+  
+  // Determine match category
   let match: "Strong" | "Medium" | "Weak";
-  if (minimumScore >= 0.7 && relevantMonthsTotal >= 12) {
+  if (finalScore >= 70) {
     match = "Strong";
-  } else if (minimumScore >= 0.4) {
+  } else if (finalScore >= 40) {
     match = "Medium";
   } else {
     match = "Weak";
   }
-
-  return { match, metCount, missingCount, minimumScore, preferredScore };
+  
+  const scoreBreakdown: ScoreBreakdown = {
+    finalScore,
+    meetsMinimum,
+    rejectionReason,
+    highestEducation,
+    contributions: {
+      yearsExperience: yearsExpContribution,
+      education: educationContribution,
+      certifications: certsContribution,
+      skills: skillsContribution,
+      preferredExperience: preferredExpContribution,
+    },
+    details: {
+      requiredYearsExp,
+      candidateYearsExp: Math.round(candidateYearsExp * 10) / 10,
+      requiredDegree,
+      candidateDegree: highestEducation,
+      requiredCertsCount,
+      candidateCertsMatchedCount,
+      totalSkillsRequired,
+      skillsMatched,
+      preferredCriteriaCount,
+      preferredCriteriaMetCount,
+    },
+  };
+  
+  return { match, metCount, missingCount, minimumScore, preferredScore, scoreBreakdown };
 }
 
 // ─── POST handler ─────────────────────────────────────────
@@ -959,9 +1217,11 @@ export async function POST(req: Request) {
             // 6. Overall match
             const totalRelevantMonths =
               experience.relevantYears * 12 + experience.relevantMonths;
-            const { match, metCount, missingCount, minimumScore, preferredScore } = computeOverallMatch(
+            const { match, metCount, missingCount, minimumScore, preferredScore, scoreBreakdown } = computeOverallMatch(
               expectations,
-              totalRelevantMonths
+              totalRelevantMonths,
+              parsed,
+              csvRow
             );
 
             // 7. Compute flags
@@ -1093,6 +1353,7 @@ export async function POST(req: Request) {
               keyRequirementsMetCount: metCount,
               keyRequirementsMissingCount: missingCount,
               overallMatch: match,
+              scoreBreakdown,
               screeningRationale: rationale,
               nonRelevantExperienceCounted,
               isEdgeCase,

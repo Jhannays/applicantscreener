@@ -117,6 +117,47 @@ export interface ExpectationCheck {
 }
 
 // ──────────────────────────────────────────────
+// Score Breakdown
+// ──────────────────────────────────────────────
+
+export interface ScoreBreakdown {
+  /** Final calculated score (0-100) */
+  finalScore: number;
+  /** Whether candidate meets all minimum requirements */
+  meetsMinimum: boolean;
+  /** Reason if candidate doesn't meet minimum requirements */
+  rejectionReason?: string;
+  /** Highest/most advanced education derived from resume */
+  highestEducation: string;
+  /** Score contributions for each category (0-1) */
+  contributions: {
+    /** Required years experience contribution (0-1) */
+    yearsExperience: number;
+    /** Required degree contribution (0-1) */
+    education: number;
+    /** Required certifications contribution (0-1) */
+    certifications: number;
+    /** Skills matched contribution (0-1) */
+    skills: number;
+    /** Preferred experience contribution (0-1) */
+    preferredExperience: number;
+  };
+  /** Breakdown details for transparency */
+  details: {
+    requiredYearsExp?: number;
+    candidateYearsExp: number;
+    requiredDegree?: string;
+    candidateDegree: string;
+    requiredCertsCount: number;
+    candidateCertsMatchedCount: number;
+    totalSkillsRequired: number;
+    skillsMatched: number;
+    preferredCriteriaCount: number;
+    preferredCriteriaMetCount: number;
+  };
+}
+
+// ──────────────────────────────────────────────
 // Per-Resume Result
 // ──────────────────────────────────────────────
 
@@ -138,6 +179,8 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
+  /** Calculated score breakdown with contributions */
+  scoreBreakdown: ScoreBreakdown;
   /** Transparent explanation of the overall screening logic and decision */
   screeningRationale: string;
   /** true when some non-relevant roles exist (total exp > relevant exp) */
