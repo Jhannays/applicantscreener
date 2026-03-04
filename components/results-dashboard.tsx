@@ -387,7 +387,7 @@ function ApplicantExpandedRow({
                 </thead>
                 <tbody>
                   {result.roleRelevance.map((r, i) => (
-                    <tbody key={i}>
+                    <React.Fragment key={i}>
                       <tr
                         className="border-b border-border/50"
                       >
@@ -518,7 +518,7 @@ function ApplicantExpandedRow({
                           })()}
                         </td>
                       </tr>
-                    </tbody>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1576,11 +1576,13 @@ export function ResultsDashboard({
 
       {/* SME Review Notes Panel */}
       <div className="rounded-lg border border-border bg-card">
-        <button
-          onClick={() => setSmePanelOpen(!smePanelOpen)}
-          className="flex w-full items-center justify-between px-4 py-3 text-left"
+        <div
+          className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left"
         >
-          <div className="flex items-center gap-2">
+          <div 
+            className="flex flex-1 items-center gap-2"
+            onClick={() => setSmePanelOpen(!smePanelOpen)}
+          >
             <NotebookPen className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">
               SME Review Notes
@@ -1599,8 +1601,7 @@ export function ResultsDashboard({
           <div className="flex items-center gap-2">
             {/* Save / Load buttons */}
             <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 const name = sessionNameInput.trim() || `Session ${new Date().toLocaleDateString()}`;
                 saveSession(name);
                 setSessionNameInput("");
@@ -1612,8 +1613,7 @@ export function ResultsDashboard({
               Save
             </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 loadSavedSessions();
                 setShowSavedSessions(!showSavedSessions);
               }}
@@ -1623,13 +1623,18 @@ export function ResultsDashboard({
               <FolderOpen className="h-3 w-3" />
               Load
             </button>
-            {smePanelOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
+            <div 
+              onClick={() => setSmePanelOpen(!smePanelOpen)}
+              className="cursor-pointer"
+            >
+              {smePanelOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
           </div>
-        </button>
+        </div>
 
         {smePanelOpen && (
           <div className="border-t border-border px-4 py-3 space-y-3">
@@ -1897,7 +1902,7 @@ export function ResultsDashboard({
                 const rowId = `${result.reqId}-${result.resumeFile}`;
                 const isExpanded = expandedId === rowId;
                 return (
-                  <tbody key={rowId}>
+                  <React.Fragment key={rowId}>
                     <tr
                       onClick={() =>
                         setExpandedId(isExpanded ? null : rowId)
@@ -2010,7 +2015,7 @@ export function ResultsDashboard({
                         onRoleNoteChange={onRoleNoteChange}
                       />
                     )}
-                  </tbody>
+                  </React.Fragment>
                 );
               })}
             </tbody>
