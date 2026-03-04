@@ -780,126 +780,131 @@ function computeOverallMatch(
   ).length;
   
   // === CONTRIBUTION CALCULATIONS (0-1 scale) ===
+  // Rules: 1 = all values match, 0.5-0.9 = partial match, 0 = no match
+  
+  // Helper function for contribution calculation
+  const calculateContribution = (matched: number, required: number): number => {
+    if (required === 0) return 1; // No requirement = full credit
+    if (matched === 0) return 0; // No match = 0
+    const ratio = matched / required;
+    if (ratio >= 1) return 1; // All values match
+    if (ratio >= 0.9) return 0.9;
+    if (ratio >= 0.75) return 0.8;
+    if (ratio >= 0.6) return 0.7;
+    if (ratio >= 0.5) return 0.6;
+    return 0.5; // Partial match (less than 50%)
+  };
   
   // Years of experience contribution
   let yearsExpContribution = 0;
-  if (requiredYearsExp !== undefined && requiredYearsExp > 0) {
-    if (candidateYearsExp >= requiredYearsExp) {
-      yearsExpContribution = 1;
-    } else if (candidateYearsExp >= requiredYearsExp * 0.75) {
-      yearsExpContribution = 0.9;
-    } else if (candidateYearsExp >= requiredYearsExp * 0.5) {
-      yearsExpContribution = 0.7;
-    } else if (candidateYearsExp > 0) {
-      yearsExpContribution = 0.5;
-    }
+  if (requiredYearsExp === undefined || requiredYearsExp === 0) {
+    // No required years specified
+    yearsExpContribution = candidateYearsExp > 0 ? 1 : 0;
+  } else if (candidateYearsExp >= requiredYearsExp) {
+    yearsExpContribution = 1; // All values match
+  } else if (candidateYearsExp === 0) {
+    yearsExpContribution = 0; // No match
   } else {
-    // No required years specified, give full credit if has relevant experience
-    yearsExpContribution = candidateYearsExp > 0 ? 1 : 0.5;
+    // Partial match (0.5-0.9)
+    yearsExpContribution = calculateContribution(candidateYearsExp, requiredYearsExp);
   }
   
   // Education contribution
   let educationContribution = 0;
-  if (requiredDegree) {
+  if (!requiredDegree) {
+    // No required degree specified
+    educationContribution = highestEducation !== "Not specified" ? 1 : 0;
+  } else {
     const requiredLevel = getEducationLevel(requiredDegree);
     const candidateLevel = getEducationLevel(highestEducation);
     if (candidateLevel >= requiredLevel) {
-      educationContribution = 1;
-    } else if (candidateLevel === requiredLevel - 1) {
-      educationContribution = 0.7;
-    } else if (candidateLevel > 0) {
-      educationContribution = 0.5;
+      educationContribution = 1; // All values match
+    } else if (candidateLevel === 0) {
+      educationContribution = 0; // No match
+    } else {
+      // Partial match based on level difference
+      const diff = requiredLevel - candidateLevel;
+      if (diff === 1) educationContribution = 0.8;
+      else if (diff === 2) educationContribution = 0.6;
+      else educationContribution = 0.5;
     }
-  } else {
-    // No required degree specified
-    educationContribution = highestEducation !== "Not specified" ? 1 : 0.5;
   }
   
   // Certifications contribution
-  let certsContribution = 0;
-  if (requiredCertsCount > 0) {
-    const ratio = candidateCertsMatchedCount / requiredCertsCount;
-    if (ratio >= 1) {
-      certsContribution = 1;
-    } else if (ratio >= 0.75) {
-      certsContribution = 0.9;
-    } else if (ratio >= 0.5) {
-      certsContribution = 0.7;
-    } else if (ratio > 0) {
-      certsContribution = 0.5;
-    }
-  } else {
-    // No required certs
-    certsContribution = 1;
-  }
+  const certsContribution = calculateContribution(candidateCertsMatchedCount, requiredCertsCount);
   
   // Skills contribution
-  let skillsContribution = 0;
-  if (totalSkillsRequired > 0) {
-    const ratio = skillsMatched / totalSkillsRequired;
-    if (ratio >= 1) {
-      skillsContribution = 1;
-    } else if (ratio >= 0.75) {
-      skillsContribution = 0.9;
-    } else if (ratio >= 0.5) {
-      skillsContribution = 0.7;
-    } else if (ratio > 0) {
-      skillsContribution = 0.5;
-    }
-  } else {
-    // No skill requirements
-    skillsContribution = 1;
-  }
+  const skillsContribution = calculateContribution(skillsMatched, totalSkillsRequired);
   
   // Preferred experience contribution
-  let preferredExpContribution = 0;
-  if (preferredCriteriaCount > 0) {
-    const ratio = preferredCriteriaMetCount / preferredCriteriaCount;
-    if (ratio >= 1) {
-      preferredExpContribution = 1;
-    } else if (ratio >= 0.75) {
-      preferredExpContribution = 0.9;
-    } else if (ratio >= 0.5) {
-      preferredExpContribution = 0.7;
-    } else if (ratio > 0) {
-      preferredExpContribution = 0.5;
-    }
-  } else {
-    preferredExpContribution = 1;
+  const preferredExpContribution = calculateContribution(preferredCriteriaMetCount, preferredCriteriaCount);
+  
+  // === DETERMINE IF MEETS ALL REQUIRED CRITERIA (STRICT) ===
+  // Required criteria: Years of Experience, Required Degree, Required Certifications
+  // ALL must be met for base 50%, otherwise score = 0
+  
+  const missingRequiredCriteria: string[] = [];
+  
+  // Check Required Years of Experience
+  const meetsYearsReq = requiredYearsExp === undefined || candidateYearsExp >= requiredYearsExp;
+  if (!meetsYearsReq) {
+    missingRequiredCriteria.push(`Required ${requiredYearsExp} years experience (has ${Math.round(candidateYearsExp * 10) / 10})`);
   }
   
-  // === DETERMINE IF MEETS MINIMUM REQUIREMENTS ===
-  // Check all minimum requirements are Met or Partially Met
-  const minimumNotEvident = minimumReqs.filter((e) => e.status === "Not Evident");
-  const meetsMinimum = minimumNotEvident.length === 0;
+  // Check Required Degree
+  let meetsDegreeReq = true;
+  if (requiredDegree) {
+    const requiredLevel = getEducationLevel(requiredDegree);
+    const candidateLevel = getEducationLevel(highestEducation);
+    meetsDegreeReq = candidateLevel >= requiredLevel;
+    if (!meetsDegreeReq) {
+      missingRequiredCriteria.push(`Required ${requiredDegree} (has ${highestEducation})`);
+    }
+  }
+  
+  // Check Required Certifications (all must be Met)
+  const meetsCertsReq = requiredCertsCount === 0 || candidateCertsMatchedCount === requiredCertsCount;
+  if (!meetsCertsReq) {
+    const missingCerts = requiredCerts.filter((e) => e.status !== "Met").map((e) => e.expectation);
+    missingRequiredCriteria.push(`Missing certifications: ${missingCerts.slice(0, 2).join(", ")}${missingCerts.length > 2 ? ` (+${missingCerts.length - 2})` : ""}`);
+  }
+  
+  // Final determination: ALL required criteria must be met
+  const meetsMinimum = meetsYearsReq && meetsDegreeReq && meetsCertsReq;
   
   // Build rejection reason if doesn't meet minimum
   let rejectionReason: string | undefined;
   if (!meetsMinimum) {
-    const missing = minimumNotEvident.map((e) => e.expectation).slice(0, 3);
-    rejectionReason = `Missing required: ${missing.join(", ")}${minimumNotEvident.length > 3 ? ` (+${minimumNotEvident.length - 3} more)` : ""}`;
+    rejectionReason = missingRequiredCriteria.join("; ");
   }
   
-  // === FINAL SCORE CALCULATION ===
-  // If any required criteria missing → score = 0
-  // Otherwise: 50% base + (preferred % of remaining 50%)
+  // === FINAL SCORE CALCULATION (STRICT RULES) ===
+  // Rule: If ANY required criteria is missing → score = 0
+  // Rule: If ALL required criteria met → base 50%
+  // Rule: Remaining 50% = (preferred criteria met / total preferred criteria) * 50%
   
   let finalScore = 0;
   if (meetsMinimum) {
-    // Base 50% for meeting all required
+    // Base 50% for meeting ALL required criteria
     const baseScore = 50;
     
-    // Calculate average of required contributions for the base
-    const requiredContributions = [yearsExpContribution, educationContribution, certsContribution, skillsContribution];
-    const avgRequiredContribution = requiredContributions.reduce((a, b) => a + b, 0) / requiredContributions.length;
+    // Preferred criteria: Preferred Experience + Skills
+    // Calculate percentage of preferred criteria met
+    const totalPreferredCount = preferredCriteriaCount + totalSkillsRequired;
+    const totalPreferredMet = preferredCriteriaMetCount + skillsMatched;
     
-    // Adjust base score by how well requirements are met (not just pass/fail but quality)
-    const adjustedBase = baseScore * avgRequiredContribution;
+    let preferredPercentage = 0;
+    if (totalPreferredCount > 0) {
+      preferredPercentage = totalPreferredMet / totalPreferredCount;
+    } else {
+      // No preferred criteria defined, give full bonus
+      preferredPercentage = 1;
+    }
     
-    // Remaining 50% based on preferred criteria
-    const preferredBonus = 50 * preferredExpContribution;
+    // Remaining 50% distributed based on preferred percentage
+    const preferredBonus = Math.round(50 * preferredPercentage);
     
-    finalScore = Math.round(adjustedBase + preferredBonus);
+    finalScore = baseScore + preferredBonus;
   }
   
   // Ensure score is between 0-100
