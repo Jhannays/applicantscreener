@@ -1106,12 +1106,64 @@ export function ResultsDashboard({
 
       if (r.expectations.length > 0) {
         md += "### Job Expects vs Resume Shows\n\n";
-        md += "| Expectation | Status | Evidence |\n";
-        md += "|-------------|--------|----------|\n";
-        r.expectations.forEach((e) => {
-          md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
-        });
-        md += "\n";
+        
+        const minReqs = r.expectations.filter((e) => e.category === "minimum");
+        const prefReqs = r.expectations.filter((e) => e.category === "preferred");
+        const uponHireReqs = r.expectations.filter((e) => e.category === "upon_hire");
+        const afterHireReqs = r.expectations.filter((e) => e.category === "after_hire");
+        const uncatReqs = r.expectations.filter((e) => !e.category);
+        
+        if (minReqs.length > 0) {
+          md += "#### Minimum Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          minReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (prefReqs.length > 0) {
+          md += "#### Preferred Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          prefReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (uponHireReqs.length > 0) {
+          md += "#### Upon Hire Requirements\n";
+          md += "_Expected at start -- does not disqualify_\n\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          uponHireReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (afterHireReqs.length > 0) {
+          md += "#### After Hire Requirements\n";
+          md += "_Within X months -- does not disqualify_\n\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          afterHireReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (uncatReqs.length > 0) {
+          md += "#### Other Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          uncatReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
       }
 
       md += "---\n\n";
