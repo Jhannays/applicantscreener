@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, Fragment } from "react";
 import {
   Download,
   ChevronDown,
@@ -387,7 +387,7 @@ function ApplicantExpandedRow({
                 </thead>
                 <tbody>
                   {result.roleRelevance.map((r, i) => (
-                    <React.Fragment key={i}>
+                    <Fragment key={i}>
                       <tr
                         className="border-b border-border/50"
                       >
@@ -518,7 +518,7 @@ function ApplicantExpandedRow({
                           })()}
                         </td>
                       </tr>
-                    </React.Fragment>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1902,7 +1902,7 @@ export function ResultsDashboard({
                 const rowId = `${result.reqId}-${result.resumeFile}`;
                 const isExpanded = expandedId === rowId;
                 return (
-                  <React.Fragment key={rowId}>
+                  <Fragment key={rowId}>
                     <tr
                       onClick={() =>
                         setExpandedId(isExpanded ? null : rowId)
@@ -2015,7 +2015,7 @@ export function ResultsDashboard({
                         onRoleNoteChange={onRoleNoteChange}
                       />
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </tbody>
