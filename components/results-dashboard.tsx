@@ -30,8 +30,6 @@ import {
   Trash2,
   Sparkles,
   BarChart3,
-  AlertTriangle,
-  RotateCcw,
 } from "lucide-react";
 import type {
   ApplicantResult,
