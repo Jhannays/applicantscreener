@@ -63,7 +63,8 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
 4. CERTIFICATION HANDLING:
    UPON HIRE / AFTER HIRE CERTIFICATIONS:
    - Do NOT automatically reject candidates for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
-   - Common certifications often obtained upon/after hire include: BLS, ACLS, PALS, NRP, and facility-specific certifications
+   - Common certifications often obtained upon/after hire include: BLS, ACLS, PALS, NRP, BCLS, and facility-specific certifications
+   - BCLS (Basic Cardiac Life Support) is ALWAYS categorized as "after_hire" by default
    - If a job posting states a certification is required "upon hire" or "within X days/months", treat candidates WITHOUT that certification as still eligible
    
    IMPLIED CERTIFICATIONS:
@@ -77,6 +78,11 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
    - Preferred qualifications = ranking only
    - Do NOT disqualify candidates for missing preferred criteria
    - In nursing roles, use preferred qualifications to funnel and prioritize
+   
+   "WILL BE" LANGUAGE DETECTION:
+   - If a requirement uses "will be", "will need", "will have", or similar future tense language, categorize it as "preferred" NOT "minimum"
+   - Example: "Candidate will be required to..." means this is NOT a current minimum requirement
+   - This applies to certifications, skills, and experience requirements
 
 6. RECENCY CONSIDERATIONS:
    - For PRN and certain healthcare roles, prioritize recent, direct healthcare experience
@@ -278,19 +284,32 @@ function buildStructuredRequirements(
 ): { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] {
   const reqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] = [];
   
-  // Helper to detect upon_hire / after_hire certifications
-  const categorizeRequirement = (text: string): "minimum" | "upon_hire" | "after_hire" => {
+  // Helper to detect upon_hire / after_hire / preferred certifications
+  const categorizeRequirement = (text: string): "minimum" | "preferred" | "upon_hire" | "after_hire" => {
     const lower = text.toLowerCase();
+    
+    // "Will be" language indicates NOT minimum requirement - treat as preferred
+    if (lower.includes("will be") || lower.includes("will have") || lower.includes("will need")) {
+      return "preferred";
+    }
+    
     // Check for "upon hire" patterns
     if (lower.includes("upon hire") || lower.includes("at hire") || lower.includes("at time of hire")) {
       return "upon_hire";
     }
+    
     // Check for "after hire" / "within X days/months/years" patterns
     if (lower.includes("after hire") || lower.includes("within") || 
         /within\s+\d+\s*(day|week|month|year)/i.test(text) ||
         lower.includes("during orientation") || lower.includes("post-hire")) {
       return "after_hire";
     }
+    
+    // BCLS (Basic Cardiac Life Support) is typically obtained after hire
+    if (lower.includes("bcls") || lower.includes("basic cardiac life support")) {
+      return "after_hire";
+    }
+    
     return "minimum";
   };
 
@@ -500,12 +519,13 @@ CRITICAL RULES:
 1. ONLY evaluate against requirements that are EXPLICITLY STATED in the job posting below. Do NOT infer, assume, or add requirements that are not written in the posting.
 2. Classify each requirement into one of these categories:
    - "minimum" = the posting says "required", "must have", "minimum", "mandatory", or lists it as a basic qualification
-   - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications
+   - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications. Also use "preferred" when "will be" language is used (e.g., "will be required", "will need", "will have") - this indicates future requirement, NOT current minimum.
    - "upon_hire" = certifications/requirements that say "upon hire", "at hire", "at time of hire" -- candidate can obtain at start
-   - "after_hire" = certifications/requirements that say "within X days/months", "after hire", "during orientation", "post-hire" -- candidate can obtain after starting
+   - "after_hire" = certifications/requirements that say "within X days/months", "after hire", "during orientation", "post-hire" -- candidate can obtain after starting. BCLS (Basic Cardiac Life Support) is ALWAYS "after_hire" by default.
    - If the posting does not clearly distinguish, treat it as "minimum" by default.
 3. A candidate must NOT be penalized for missing a "preferred", "upon_hire", or "after_hire" requirement. Only "minimum" requirements affect the core evaluation.
-4. Common certifications like BLS, ACLS, PALS, NRP are often "upon_hire" or "after_hire" in healthcare roles -- check the posting language carefully.
+4. Common certifications like BLS, ACLS, PALS, NRP, BCLS are often "upon_hire" or "after_hire" in healthcare roles -- check the posting language carefully. BCLS specifically should default to "after_hire".
+5. "Will be" language detection: If a requirement uses "will be", "will need", "will have", or similar future tense, categorize it as "preferred" NOT "minimum".
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
