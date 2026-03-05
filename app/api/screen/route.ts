@@ -28,9 +28,14 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
 
 1. EXPERIENCE RELEVANCE LOGIC:
    Task-Based Evaluation:
-   - Determine relevance based on duties performed, not job title alone
+   - Determine relevance based on duties performed when available
    - Compare resume duties directly to job description requirements
    - If duties align with required responsibilities, count the role as relevant — even if the job title differs (e.g., home health vs. hospital titles)
+   
+   Title-Based Fallback (when responsibilities are not provided):
+   - If a role does NOT list specific responsibilities/duties, USE THE JOB TITLE to determine relevance
+   - Match job titles against the target role requirements (e.g., "RN" title matches RN requirements, "Staff Nurse" matches nursing requirements)
+   - This applies when the resume only shows employer, title, and dates without duty descriptions
 
    Role-Specific Rules:
    - RN Roles: Count only post-licensure RN experience toward required RN years. Do NOT count student nurse roles or pre-licensure healthcare roles. Pre-RN healthcare exposure may provide context but does not count toward RN experience requirements.
@@ -79,10 +84,10 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
    - Do NOT disqualify candidates for missing preferred criteria
    - In nursing roles, use preferred qualifications to funnel and prioritize
    
-   "WILL BE" LANGUAGE DETECTION:
-   - If a requirement uses "will be", "will need", "will have", or similar future tense language, categorize it as "preferred" NOT "minimum"
-   - Example: "Candidate will be required to..." means this is NOT a current minimum requirement
-   - This applies to certifications, skills, and experience requirements
+   PREFERRED REQUIREMENT IDENTIFICATION:
+   - A requirement is ONLY "preferred" if it has an explicit "pref" or "preferred" prefix
+   - If a requirement does NOT have a "pref" prefix, it is a MINIMUM requirement
+   - It is valid and common for job postings to have NO preferred requirements
 
 6. RECENCY CONSIDERATIONS:
    - For PRN and certain healthcare roles, prioritize recent, direct healthcare experience
@@ -104,17 +109,6 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
    → Apply "Flag for Further Review" rather than automatic rejection
    The goal is to reduce false negatives while maintaining qualification integrity.
 
-9. VAGUE/GENERIC REQUIREMENTS - CATEGORIZE AS PREFERRED, NOT MINIMUM:
-   The following types of requirements are NON-MEASURABLE and should be categorized as "preferred" NOT "minimum":
-   - Generic duty statements: "Responsible for meeting duties and responsibilities", "Perform job duties as assigned"
-   - Catch-all phrases: "as applicable", "as assigned", "as needed", "as required", "other duties"
-   - Population/setting references: "applicable to the patient population", "assigned setting"
-   - Compliance statements: "adhere to policies", "follow guidelines", "comply with", "maintain professional"
-   - Team statements: "support the team", "work collaboratively"
-   - Any requirement that ANY qualified candidate would inherently meet
-   
-   These vague requirements do NOT help differentiate candidates and should NEVER disqualify anyone.
-   Always categorize them as "preferred" so they don't affect the minimum requirements score.
 `;
 
 // ─── Schemas ──────────────────────────────────────────────
@@ -258,6 +252,11 @@ STRICT RULES:
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
 - "Relevant" means the daily duties align with what the job posting explicitly describes.
 - Do NOT reward or penalize based on inferred requirements -- only what the posting states.
+
+TITLE-BASED FALLBACK (when responsibilities are not provided):
+- If a role does NOT list specific responsibilities/duties (empty or minimal bullets), USE THE JOB TITLE to determine relevance.
+- Match job titles against the target role requirements (e.g., "RN" or "Registered Nurse" title matches RN requirements, "Staff Nurse" matches nursing requirements).
+- This allows evaluation even when resumes only show employer, title, and dates without detailed duty descriptions.
 ${SCREENING_LOGIC_RULES}
 ${correctionRulesForRelevance}
 JOB REQUIREMENTS:
@@ -296,43 +295,14 @@ function buildStructuredRequirements(
 ): { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] {
   const reqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] = [];
   
-  // Helper to detect upon_hire / after_hire / preferred certifications
+  // Helper to detect upon_hire / after_hire / preferred requirements
+  // IMPORTANT: Only mark as "preferred" if it has explicit "pref" prefix
   const categorizeRequirement = (text: string): "minimum" | "preferred" | "upon_hire" | "after_hire" => {
     const lower = text.toLowerCase();
+    const trimmedLower = lower.trim();
     
-    // Vague/generic requirements should NOT be minimum - treat as preferred
-    // These are non-measurable, generic statements that any candidate would meet
-    const vaguePatterns = [
-      "responsible for meeting duties",
-      "duties and responsibilities",
-      "as applicable",
-      "as assigned",
-      "as needed",
-      "as required",
-      "other duties",
-      "perform other",
-      "additional duties",
-      "assigned setting",
-      "patient population",
-      "perform job duties",
-      "carry out responsibilities",
-      "fulfill responsibilities",
-      "execute duties",
-      "complete assigned",
-      "support the team",
-      "work collaboratively",
-      "maintain professional",
-      "adhere to policies",
-      "follow guidelines",
-      "comply with",
-    ];
-    
-    if (vaguePatterns.some(pattern => lower.includes(pattern))) {
-      return "preferred";
-    }
-    
-    // "Will be" language indicates NOT minimum requirement - treat as preferred
-    if (lower.includes("will be") || lower.includes("will have") || lower.includes("will need")) {
+    // PREFERRED: Only if explicitly prefixed with "pref" or "preferred"
+    if (trimmedLower.startsWith("pref") || trimmedLower.startsWith("preferred")) {
       return "preferred";
     }
     
@@ -353,6 +323,7 @@ function buildStructuredRequirements(
       return "after_hire";
     }
     
+    // Default to minimum - if no "pref" prefix, it's a minimum requirement
     return "minimum";
   };
 
@@ -561,14 +532,13 @@ async function evaluateExpectations(
 CRITICAL RULES:
 1. ONLY evaluate against requirements that are EXPLICITLY STATED in the job posting below. Do NOT infer, assume, or add requirements that are not written in the posting.
 2. Classify each requirement into one of these categories:
-   - "minimum" = the posting says "required", "must have", "minimum", "mandatory", or lists it as a basic qualification
-   - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications. Also use "preferred" when "will be" language is used (e.g., "will be required", "will need", "will have") - this indicates future requirement, NOT current minimum.
+   - "minimum" = DEFAULT category. Any requirement without explicit "pref" prefix is minimum.
+   - "preferred" = ONLY if the requirement has explicit "pref" or "preferred" prefix. It is valid for postings to have NO preferred requirements.
    - "upon_hire" = certifications/requirements that say "upon hire", "at hire", "at time of hire" -- candidate can obtain at start
    - "after_hire" = certifications/requirements that say "within X days/months", "after hire", "during orientation", "post-hire" -- candidate can obtain after starting. BCLS (Basic Cardiac Life Support) is ALWAYS "after_hire" by default.
-   - If the posting does not clearly distinguish, treat it as "minimum" by default.
 3. A candidate must NOT be penalized for missing a "preferred", "upon_hire", or "after_hire" requirement. Only "minimum" requirements affect the core evaluation.
 4. Common certifications like BLS, ACLS, PALS, NRP, BCLS are often "upon_hire" or "after_hire" in healthcare roles -- check the posting language carefully. BCLS specifically should default to "after_hire".
-5. "Will be" language detection: If a requirement uses "will be", "will need", "will have", or similar future tense, categorize it as "preferred" NOT "minimum".
+5. When evaluating experience relevance and responsibilities are NOT provided, USE THE JOB TITLE to determine relevance.
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
