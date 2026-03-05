@@ -100,6 +100,8 @@ export interface RoleRelevance {
   durationMonths: number;
   /** true when a human reviewer has overridden the AI's relevance determination */
   manualOverride?: boolean;
+  /** true when the AI failed to evaluate this role */
+  unevaluated?: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -187,6 +189,10 @@ export interface ApplicantResult {
   nonRelevantExperienceCounted: boolean;
   /** true when an ambiguity is detected: gaps, mixed relevance, low evidence, etc. */
   isEdgeCase: boolean;
+  /** True if any roles were not evaluated by the AI */
+  hasUnevaluatedRoles: boolean;
+  /** Count of roles that were not evaluated */
+  unevaluatedRolesCount: number;
   notes: string;
 }
 

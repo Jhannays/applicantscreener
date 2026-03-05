@@ -612,9 +612,12 @@ function computeExperience(
   totalMonths: number;
   relevantYears: number;
   relevantMonths: number;
+  hasUnevaluatedRoles: boolean;
+  unevaluatedRolesCount: number;
 } {
   let totalMonthsCount = 0;
   let relevantMonthsCount = 0;
+  let unevaluatedCount = 0;
   const roleRelevance: RoleRelevance[] = [];
 
   for (const role of workExperience) {
@@ -622,13 +625,28 @@ function computeExperience(
     const end = parseMonthYear(role.endDate);
     const duration = start && end ? monthsBetweenInclusive(start, end) : 0;
 
-    const relevance = relevanceResults.find(
+    // Try to find relevance by exact match first, then by fuzzy match
+    let relevance = relevanceResults.find(
       (r) => r.employer === role.employer && r.title === role.title
     );
+    
+    // If no exact match, try fuzzy matching (case-insensitive, partial match)
+    if (!relevance) {
+      relevance = relevanceResults.find(
+        (r) => 
+          r.employer.toLowerCase().includes(role.employer.toLowerCase()) ||
+          role.employer.toLowerCase().includes(r.employer.toLowerCase()) ||
+          r.title.toLowerCase().includes(role.title.toLowerCase()) ||
+          role.title.toLowerCase().includes(r.title.toLowerCase())
+      );
+    }
+    
+    const isUnevaluated = !relevance;
     const isRelevant = relevance?.isRelevant ?? false;
 
     totalMonthsCount += duration;
     if (isRelevant) relevantMonthsCount += duration;
+    if (isUnevaluated) unevaluatedCount++;
 
     roleRelevance.push({
       employer: role.employer,
@@ -636,8 +654,9 @@ function computeExperience(
       startDate: role.startDate,
       endDate: role.endDate,
       isRelevant,
-      reason: relevance?.reason || "Not evaluated",
+      reason: relevance?.reason || "Not evaluated - AI did not return evaluation for this role",
       durationMonths: duration,
+      unevaluated: isUnevaluated,
     });
   }
 
@@ -650,6 +669,8 @@ function computeExperience(
     totalMonths: total.months,
     relevantYears: relevant.years,
     relevantMonths: relevant.months,
+    hasUnevaluatedRoles: unevaluatedCount > 0,
+    unevaluatedRolesCount: unevaluatedCount,
   };
 }
 
@@ -1362,7 +1383,9 @@ export async function POST(req: Request) {
               screeningRationale: rationale,
               nonRelevantExperienceCounted,
               isEdgeCase,
-              notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
+              hasUnevaluatedRoles: experience.hasUnevaluatedRoles,
+              unevaluatedRolesCount: experience.unevaluatedRolesCount,
+              notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.${experience.hasUnevaluatedRoles ? ` WARNING: ${experience.unevaluatedRolesCount} role(s) not evaluated.` : ""}`,
             };
 
             send({ type: "result", data: result });

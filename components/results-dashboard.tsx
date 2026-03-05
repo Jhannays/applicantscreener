@@ -30,6 +30,8 @@ import {
   Trash2,
   Sparkles,
   BarChart3,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import type {
   ApplicantResult,
@@ -217,12 +219,16 @@ function ApplicantExpandedRow({
   onChangeExpectationStatus,
   roleNotes,
   onRoleNoteChange,
+  onReevaluateRoles,
+  isReevaluating,
 }: {
   result: ApplicantResult;
   onToggleRelevance: (roleIndex: number) => void;
   onChangeExpectationStatus: (expIndex: number, newStatus: ExpectationCheck["status"]) => void;
   roleNotes: RoleNote[];
   onRoleNoteChange: (roleKey: string, note: string) => void;
+  onReevaluateRoles: () => void;
+  isReevaluating: boolean;
 }) {
   const [showFullRationale, setShowFullRationale] = useState(false);
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
@@ -230,11 +236,12 @@ function ApplicantExpandedRow({
 
   const hasOverrides = result.roleRelevance.some((r) => r.manualOverride) ||
     result.expectations.some((e) => e.manualOverride);
+  const hasUnevaluatedRoles = result.hasUnevaluatedRoles || result.roleRelevance.some((r) => r.unevaluated);
 
   return (
     <tr>
       <td
-        colSpan={11}
+        colSpan={12}
         className="border-b border-border bg-muted/10 px-4 py-5"
       >
         <div className="space-y-5">
@@ -452,11 +459,41 @@ function ApplicantExpandedRow({
             </div>
           </div>
 
+          {/* Unevaluated Roles Warning */}
+          {hasUnevaluatedRoles && (
+            <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <div>
+                  <span className="text-sm font-semibold text-amber-800">
+                    {result.unevaluatedRolesCount || result.roleRelevance.filter((r) => r.unevaluated).length} role(s) not evaluated
+                  </span>
+                  <p className="text-xs text-amber-700">
+                    The AI did not return evaluations for some roles. Click re-evaluate to retry.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onReevaluateRoles}
+                disabled={isReevaluating}
+                className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${isReevaluating ? "animate-spin" : ""}`} />
+                {isReevaluating ? "Re-evaluating..." : "Re-evaluate Roles"}
+              </button>
+            </div>
+          )}
+
           {/* Role Relevance */}
           <div>
             <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Briefcase className="h-3.5 w-3.5" />
               Role-by-Role Relevance
+              {hasUnevaluatedRoles && (
+                <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  {result.unevaluatedRolesCount || result.roleRelevance.filter((r) => r.unevaluated).length} unevaluated
+                </span>
+              )}
             </h4>
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full text-sm">
@@ -499,18 +536,25 @@ function ApplicantExpandedRow({
                           {r.durationMonths % 12}m
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onToggleRelevance(i); }}
-                            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
-                              r.isRelevant
-                                ? "bg-emerald-500/10 text-emerald-600"
-                                : "bg-red-500/10 text-red-500"
-                            }`}
-                            title="Click to toggle relevance"
-                          >
-                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
-                            {r.isRelevant ? "Relevant" : "Not Relevant"}
-                          </button>
+                          {r.unevaluated ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              Not Evaluated
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onToggleRelevance(i); }}
+                              className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
+                                r.isRelevant
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : "bg-red-500/10 text-red-500"
+                              }`}
+                              title="Click to toggle relevance"
+                            >
+                              <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                              {r.isRelevant ? "Relevant" : "Not Relevant"}
+                            </button>
+                          )}
                           {r.manualOverride && (
                             <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
                               OVERRIDDEN
@@ -724,6 +768,7 @@ export function ResultsDashboard({
   const [showSavedSessions, setShowSavedSessions] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SMESession[]>([]);
   const [sessionNameInput, setSessionNameInput] = useState("");
+  const [reevaluatingId, setReevaluatingId] = useState<string | null>(null);
 
   // ─── Anonymization ──────────────────────────────────────
   // Map real candidate names AND file names to anonymous labels.
@@ -907,8 +952,71 @@ export function ResultsDashboard({
         `${role.title} at ${role.employer}`,
         role.reason
       );
+  },
+  [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
+  );
+  
+  // Handler for re-evaluating unevaluated roles
+  const handleReevaluateRoles = useCallback(
+    async (resultIndex: number) => {
+      const result = results[resultIndex];
+      const rowId = `${result.reqId}-${result.resumeFile}`;
+      setReevaluatingId(rowId);
+      
+      try {
+        // Get unevaluated roles
+        const unevaluatedRoles = result.workExperience.filter((_, i) => 
+          result.roleRelevance[i]?.unevaluated
+        );
+        
+        if (unevaluatedRoles.length === 0) {
+          // Re-evaluate all roles if none specifically marked as unevaluated
+          const allRoles = result.workExperience;
+          const response = await fetch("/api/screen/reevaluate-roles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roles: allRoles,
+              jobRequirements: "", // Would need to pass from parent if available
+              correctionRules: correctionRules.map(r => r.rule).join("\n"),
+            }),
+          });
+          
+          if (!response.ok) throw new Error("Re-evaluation failed");
+          
+          const data = await response.json();
+          
+          // Update result with new evaluations
+          const updatedResult = { ...result };
+          const updatedRoleRelevance = [...result.roleRelevance];
+          
+          data.results.forEach((newEval: any) => {
+            const idx = updatedRoleRelevance.findIndex(
+              (r) => r.employer === newEval.employer && r.title === newEval.title
+            );
+            if (idx !== -1) {
+              updatedRoleRelevance[idx] = {
+                ...updatedRoleRelevance[idx],
+                isRelevant: newEval.isRelevant,
+                reason: newEval.reason,
+                unevaluated: newEval.unevaluated,
+              };
+            }
+          });
+          
+          updatedResult.roleRelevance = updatedRoleRelevance;
+          updatedResult.hasUnevaluatedRoles = data.stillUnevaluated > 0;
+          updatedResult.unevaluatedRolesCount = data.stillUnevaluated;
+          
+          recalculateAndUpdate(resultIndex, updatedResult);
+        }
+      } catch (err) {
+        console.error("Re-evaluation failed:", err);
+      } finally {
+        setReevaluatingId(null);
+      }
     },
-    [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
+    [results, correctionRules, recalculateAndUpdate]
   );
 
   const handleChangeExpectationStatus = useCallback(
@@ -2143,6 +2251,11 @@ export function ResultsDashboard({
                         }}
                         roleNotes={roleNotes}
                         onRoleNoteChange={onRoleNoteChange}
+                        onReevaluateRoles={() => {
+                          const globalIndex = results.indexOf(result);
+                          if (globalIndex !== -1) handleReevaluateRoles(globalIndex);
+                        }}
+                        isReevaluating={reevaluatingId === rowId}
                       />
                     )}
                   </Fragment>
