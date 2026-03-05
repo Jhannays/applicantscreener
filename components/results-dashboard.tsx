@@ -967,6 +967,32 @@ export function ResultsDashboard({
     },
     [results, onResultsChange]
   );
+  
+  // Handler for overriding score
+  const handleOverrideScore = useCallback(
+    (resultIndex: number, newScore: number) => {
+      const updatedResult = { ...results[resultIndex] };
+      updatedResult.scoreBreakdown = {
+        ...updatedResult.scoreBreakdown,
+        finalScore: newScore,
+      };
+      updatedResult.scoreOverride = true;
+      
+      // Also update match based on new score
+      if (newScore >= 70) {
+        updatedResult.overallMatch = "Strong";
+      } else if (newScore >= 40) {
+        updatedResult.overallMatch = "Medium";
+      } else {
+        updatedResult.overallMatch = "Weak";
+      }
+      
+      const newResults = [...results];
+      newResults[resultIndex] = updatedResult;
+      onResultsChange(newResults);
+    },
+    [results, onResultsChange]
+  );
 
   // Handler for re-evaluating unevaluated roles
   const handleReevaluateRoles = useCallback(
@@ -1206,7 +1232,7 @@ export function ResultsDashboard({
         csvEscape(skillsStr || "N/A"),
         csvEscape(yoeStr),
         csvEscape(certsStr || "N/A"),
-        `${r.scoreBreakdown?.finalScore || 0}%`,
+        `${r.scoreBreakdown?.finalScore || 0}%${r.scoreOverride ? " (Override)" : ""}`,
         csvEscape(r.overallMatch + (r.matchOverride ? " (Override)" : "")),
         gapPresent,
         nonRelevant,
@@ -1283,7 +1309,7 @@ export function ResultsDashboard({
     results.forEach((r) => {
       md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${getDisplayFile(r.resumeFile)}\n\n`;
-    md += `**Overall Match:** ${r.overallMatch}${r.matchOverride ? " (Override)" : ""} (Score: ${r.scoreBreakdown?.finalScore || 0}%)\n`;
+    md += `**Overall Match:** ${r.overallMatch}${r.matchOverride ? " (Override)" : ""} (Score: ${r.scoreBreakdown?.finalScore || 0}%${r.scoreOverride ? " Override" : ""})\n`;
     md += `**Meets Minimum:** ${r.scoreBreakdown?.meetsMinimum ? "Yes" : "No"}${r.scoreBreakdown?.rejectionReason ? ` - ${r.scoreBreakdown.rejectionReason}` : ""}\n`;
     md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
     md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n`;
@@ -2231,15 +2257,36 @@ export function ResultsDashboard({
                               style={{ width: `${result.scoreBreakdown?.finalScore || 0}%` }}
                             />
                           </div>
-                          <span className={`text-xs font-semibold ${
-                            (result.scoreBreakdown?.finalScore || 0) >= 70
-                              ? "text-emerald-700"
-                              : (result.scoreBreakdown?.finalScore || 0) >= 40
-                              ? "text-amber-700"
-                              : "text-red-700"
-                          }`}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const globalIndex = results.indexOf(result);
+                              if (globalIndex !== -1) {
+                                const currentScore = result.scoreBreakdown?.finalScore || 0;
+                                const newScoreStr = prompt("Enter new score (0-100):", String(currentScore));
+                                if (newScoreStr !== null) {
+                                  const newScore = Math.max(0, Math.min(100, parseInt(newScoreStr, 10) || 0));
+                                  handleOverrideScore(globalIndex, newScore);
+                                }
+                              }
+                            }}
+                            className={`inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
+                              (result.scoreBreakdown?.finalScore || 0) >= 70
+                                ? "text-emerald-700 hover:bg-emerald-500/10"
+                                : (result.scoreBreakdown?.finalScore || 0) >= 40
+                                ? "text-amber-700 hover:bg-amber-500/10"
+                                : "text-red-700 hover:bg-red-500/10"
+                            }`}
+                            title="Click to override score"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
                             {result.scoreBreakdown?.finalScore || 0}%
-                          </span>
+                          </button>
+                          {result.scoreOverride && (
+                            <span className="inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                              OVR
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3">

@@ -185,6 +185,8 @@ export interface ApplicantResult {
   matchOverride?: boolean;
   /** Calculated score breakdown with contributions */
   scoreBreakdown: ScoreBreakdown;
+  /** True when a human reviewer has overridden the AI's score */
+  scoreOverride?: boolean;
   /** Transparent explanation of the overall screening logic and decision */
   screeningRationale: string;
   /** true when some non-relevant roles exist (total exp > relevant exp) */
@@ -198,7 +200,7 @@ export interface ApplicantResult {
   notes: string;
 }
 
-// ──────────────────────────────────────────────
+// ─────────────────────────���────────────────────
 // Per-Resume Error
 // ──────────────────────────────────────────────
 

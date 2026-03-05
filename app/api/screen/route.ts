@@ -103,6 +103,18 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
    - Resume inconsistencies
    → Apply "Flag for Further Review" rather than automatic rejection
    The goal is to reduce false negatives while maintaining qualification integrity.
+
+9. VAGUE/GENERIC REQUIREMENTS - CATEGORIZE AS PREFERRED, NOT MINIMUM:
+   The following types of requirements are NON-MEASURABLE and should be categorized as "preferred" NOT "minimum":
+   - Generic duty statements: "Responsible for meeting duties and responsibilities", "Perform job duties as assigned"
+   - Catch-all phrases: "as applicable", "as assigned", "as needed", "as required", "other duties"
+   - Population/setting references: "applicable to the patient population", "assigned setting"
+   - Compliance statements: "adhere to policies", "follow guidelines", "comply with", "maintain professional"
+   - Team statements: "support the team", "work collaboratively"
+   - Any requirement that ANY qualified candidate would inherently meet
+   
+   These vague requirements do NOT help differentiate candidates and should NEVER disqualify anyone.
+   Always categorize them as "preferred" so they don't affect the minimum requirements score.
 `;
 
 // ─── Schemas ──────────────────────────────────────────────
@@ -287,6 +299,37 @@ function buildStructuredRequirements(
   // Helper to detect upon_hire / after_hire / preferred certifications
   const categorizeRequirement = (text: string): "minimum" | "preferred" | "upon_hire" | "after_hire" => {
     const lower = text.toLowerCase();
+    
+    // Vague/generic requirements should NOT be minimum - treat as preferred
+    // These are non-measurable, generic statements that any candidate would meet
+    const vaguePatterns = [
+      "responsible for meeting duties",
+      "duties and responsibilities",
+      "as applicable",
+      "as assigned",
+      "as needed",
+      "as required",
+      "other duties",
+      "perform other",
+      "additional duties",
+      "assigned setting",
+      "patient population",
+      "perform job duties",
+      "carry out responsibilities",
+      "fulfill responsibilities",
+      "execute duties",
+      "complete assigned",
+      "support the team",
+      "work collaboratively",
+      "maintain professional",
+      "adhere to policies",
+      "follow guidelines",
+      "comply with",
+    ];
+    
+    if (vaguePatterns.some(pattern => lower.includes(pattern))) {
+      return "preferred";
+    }
     
     // "Will be" language indicates NOT minimum requirement - treat as preferred
     if (lower.includes("will be") || lower.includes("will have") || lower.includes("will need")) {
