@@ -181,6 +181,8 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
+  /** True when a human reviewer has overridden the AI's match determination */
+  matchOverride?: boolean;
   /** Calculated score breakdown with contributions */
   scoreBreakdown: ScoreBreakdown;
   /** Transparent explanation of the overall screening logic and decision */

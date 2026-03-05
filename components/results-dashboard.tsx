@@ -954,6 +954,20 @@ export function ResultsDashboard({
   [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
   );
   
+  // Handler for overriding match
+  const handleOverrideMatch = useCallback(
+    (resultIndex: number, newMatch: "Strong" | "Medium" | "Weak") => {
+      const updatedResult = { ...results[resultIndex] };
+      updatedResult.overallMatch = newMatch;
+      updatedResult.matchOverride = true;
+      
+      const newResults = [...results];
+      newResults[resultIndex] = updatedResult;
+      onResultsChange(newResults);
+    },
+    [results, onResultsChange]
+  );
+
   // Handler for re-evaluating unevaluated roles
   const handleReevaluateRoles = useCallback(
     async (resultIndex: number) => {
@@ -1193,7 +1207,7 @@ export function ResultsDashboard({
         csvEscape(yoeStr),
         csvEscape(certsStr || "N/A"),
         `${r.scoreBreakdown?.finalScore || 0}%`,
-        csvEscape(r.overallMatch),
+        csvEscape(r.overallMatch + (r.matchOverride ? " (Override)" : "")),
         gapPresent,
         nonRelevant,
         edgeCase,
@@ -1269,7 +1283,7 @@ export function ResultsDashboard({
     results.forEach((r) => {
       md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${getDisplayFile(r.resumeFile)}\n\n`;
-    md += `**Overall Match:** ${r.overallMatch} (Score: ${r.scoreBreakdown?.finalScore || 0}%)\n`;
+    md += `**Overall Match:** ${r.overallMatch}${r.matchOverride ? " (Override)" : ""} (Score: ${r.scoreBreakdown?.finalScore || 0}%)\n`;
     md += `**Meets Minimum:** ${r.scoreBreakdown?.meetsMinimum ? "Yes" : "No"}${r.scoreBreakdown?.rejectionReason ? ` - ${r.scoreBreakdown.rejectionReason}` : ""}\n`;
     md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
     md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n`;
@@ -2229,11 +2243,30 @@ export function ResultsDashboard({
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${matchStyles[result.overallMatch] || ""}`}
-                        >
-                          {result.overallMatch}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const globalIndex = results.indexOf(result);
+                              if (globalIndex !== -1) {
+                                const matchOrder: ("Strong" | "Medium" | "Weak")[] = ["Strong", "Medium", "Weak"];
+                                const currentIdx = matchOrder.indexOf(result.overallMatch);
+                                const nextIdx = (currentIdx + 1) % matchOrder.length;
+                                handleOverrideMatch(globalIndex, matchOrder[nextIdx]);
+                              }
+                            }}
+                            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-primary/30 ${matchStyles[result.overallMatch] || ""}`}
+                            title="Click to override match"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                            {result.overallMatch}
+                          </button>
+                          {result.matchOverride && (
+                            <span className="inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                              OVERRIDDEN
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && (
