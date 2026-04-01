@@ -100,6 +100,8 @@ export interface RoleRelevance {
   durationMonths: number;
   /** true when a human reviewer has overridden the AI's relevance determination */
   manualOverride?: boolean;
+  /** true when the AI failed to evaluate this role */
+  unevaluated?: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -108,12 +110,53 @@ export interface RoleRelevance {
 
 export interface ExpectationCheck {
   expectation: string;
-  /** Whether this requirement is a minimum (must-have) or preferred (nice-to-have) */
-  category: "minimum" | "preferred";
+  /** Whether this requirement is a minimum (must-have), preferred (nice-to-have), upon_hire (obtained at start), or after_hire (obtained within X months) */
+  category: "minimum" | "preferred" | "upon_hire" | "after_hire";
   status: "Met" | "Partially Met" | "Not Evident";
   evidence: string;
   /** true when a human reviewer has overridden the AI's status determination */
   manualOverride?: boolean;
+}
+
+// ──────────────────────────────────────────────
+// Score Breakdown
+// ──────────────────────────────────────────────
+
+export interface ScoreBreakdown {
+  /** Final calculated score (0-100) */
+  finalScore: number;
+  /** Whether candidate meets all minimum requirements */
+  meetsMinimum: boolean;
+  /** Reason if candidate doesn't meet minimum requirements */
+  rejectionReason?: string;
+  /** Highest/most advanced education derived from resume */
+  highestEducation: string;
+  /** Score contributions for each category (0-1) */
+  contributions: {
+    /** Required years experience contribution (0-1) */
+    yearsExperience: number;
+    /** Required degree contribution (0-1) */
+    education: number;
+    /** Required certifications contribution (0-1) */
+    certifications: number;
+    /** Skills matched contribution (0-1) */
+    skills: number;
+    /** Preferred experience contribution (0-1) */
+    preferredExperience: number;
+  };
+  /** Breakdown details for transparency */
+  details: {
+    requiredYearsExp?: number;
+    candidateYearsExp: number;
+    requiredDegree?: string;
+    candidateDegree: string;
+    requiredCertsCount: number;
+    candidateCertsMatchedCount: number;
+    totalSkillsRequired: number;
+    skillsMatched: number;
+    preferredCriteriaCount: number;
+    preferredCriteriaMetCount: number;
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -138,16 +181,26 @@ export interface ApplicantResult {
   keyRequirementsMetCount: number;
   keyRequirementsMissingCount: number;
   overallMatch: "Strong" | "Medium" | "Weak";
+  /** True when a human reviewer has overridden the AI's match determination */
+  matchOverride?: boolean;
+  /** Calculated score breakdown with contributions */
+  scoreBreakdown: ScoreBreakdown;
+  /** True when a human reviewer has overridden the AI's score */
+  scoreOverride?: boolean;
   /** Transparent explanation of the overall screening logic and decision */
   screeningRationale: string;
   /** true when some non-relevant roles exist (total exp > relevant exp) */
   nonRelevantExperienceCounted: boolean;
   /** true when an ambiguity is detected: gaps, mixed relevance, low evidence, etc. */
   isEdgeCase: boolean;
+  /** True if any roles were not evaluated by the AI */
+  hasUnevaluatedRoles: boolean;
+  /** Count of roles that were not evaluated */
+  unevaluatedRolesCount: number;
   notes: string;
 }
 
-// ──────────────────────────────────────────────
+// ─────────────────────────���────────────────────
 // Per-Resume Error
 // ──────────────────────────────────────────────
 

@@ -65,7 +65,6 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^22",
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19",

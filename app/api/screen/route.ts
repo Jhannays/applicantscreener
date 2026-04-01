@@ -11,6 +11,7 @@ import type {
   ParsedResume,
   WorkExperience,
   RequisitionCSVRow,
+  ScoreBreakdown,
 } from "@/lib/types";
 import {
   parseMonthYear,
@@ -18,6 +19,108 @@ import {
   monthsToYearsMonths,
   formatMonthYear,
 } from "@/lib/date-utils";
+
+// ─── Screening Logic Rules ────────────────────────────────
+// These rules are injected into AI prompts for candidate screening relevancy logic
+
+const SCREENING_LOGIC_RULES = `
+SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
+
+1. EXPERIENCE RELEVANCE LOGIC:
+   Task-Based Evaluation:
+   - Determine relevance based on duties performed when available
+   - Compare resume duties directly to job description requirements
+   - If duties align with required responsibilities, count the role as relevant — even if the job title differs (e.g., home health vs. hospital titles)
+   
+   Title-Based Fallback (when responsibilities are not provided):
+   - If a role does NOT list specific responsibilities/duties, USE THE JOB TITLE to determine relevance
+   - Match job titles against the target role requirements (e.g., "RN" title matches RN requirements, "Staff Nurse" matches nursing requirements)
+   - This applies when the resume only shows employer, title, and dates without duty descriptions
+
+   Role-Specific Rules:
+   - RN Roles: Count only post-licensure RN experience toward required RN years. Do NOT count student nurse roles or pre-licensure healthcare roles. Pre-RN healthcare exposure may provide context but does not count toward RN experience requirements.
+   - LVN Experience (for RN roles): Include as relevant experience by default, but CLEARLY IDENTIFY it in the output for recruiter visibility. Do not hide LVN time within total RN years.
+   - PCT / MA / Paramedic / Unit Secretary Roles: Telemetry tech, paramedic, or home health roles only count if hands-on duties align with requisition requirements. Specialized areas (e.g., OBGYN MA) are relevant if core tasks match required responsibilities. Do NOT automatically assume equivalency across different healthcare titles unless criteria are clearly met.
+   - Finance Roles: Count all relevant finance and decision-support experience. If finance scope is unclear, flag for review instead of forcing qualification or rejection.
+   - Administrative Healthcare Roles: Count as relevant if duties align with patient care support, medical documentation, or clinical support functions.
+
+2. INTERNSHIPS, TRAINING PROGRAMS & STRUCTURED CLINICAL EXPERIENCE:
+   The following experience types should be INCLUDED as relevant experience BUT MUST be EXPLICITLY CALLED OUT in the screening output so recruiters can review and investigate further:
+   - Residency
+   - Apprenticeship
+   - Fellowship
+   - Internship
+   - Externship
+   - Post Graduate Year (PGY)
+   - Trainee
+   - Cohort programs
+   - LVN experience (for RN roles only)
+   
+   IMPORTANT: These should NOT be hidden within total years without visibility. Always surface them separately in the output.
+
+3. PAID VS. UNPAID EXPERIENCE:
+   - Only paid roles count toward required years of experience
+   - Do NOT count: Volunteer roles, Unpaid externships
+   - Paid internships may count if duties align
+   - Unpaid internships do not count unless explicitly confirmed otherwise
+   - Volunteer experience does NOT count toward required totals
+
+4. CERTIFICATION HANDLING:
+   UPON HIRE / AFTER HIRE CERTIFICATIONS:
+   - Do NOT automatically reject candidates for certifications listed as "Upon hire", "Within X months/years", or typically obtained during orientation
+   - Common certifications often obtained upon/after hire include: BLS, ACLS, PALS, NRP, BCLS, and facility-specific certifications
+   - BCLS (Basic Cardiac Life Support) is ALWAYS categorized as "after_hire" by default
+   - If a job posting states a certification is required "upon hire" or "within X days/months", treat candidates WITHOUT that certification as still eligible
+   
+   IMPLIED CERTIFICATIONS:
+   - If experience strongly implies certification but it is not explicitly listed on the resume: Flag for manual review instead of auto-disqualifying
+   - Example: A candidate with 5 years ICU RN experience likely has BLS/ACLS even if not listed
+   
+   - Candidates already holding preferred certifications may rank higher
+
+5. PREFERRED VS. MINIMUM QUALIFICATIONS:
+   - Minimum qualifications = eligibility (pass/fail)
+   - Preferred qualifications = ranking only
+   - Do NOT disqualify candidates for missing preferred criteria
+   - In nursing roles, use preferred qualifications to funnel and prioritize
+   
+   PREFERRED REQUIREMENT IDENTIFICATION:
+   - A requirement is ONLY "preferred" if it has an explicit "pref" or "preferred" prefix
+   - If a requirement does NOT have a "pref" prefix, it is a MINIMUM requirement
+   - It is valid and common for job postings to have NO preferred requirements
+
+6. RECENCY CONSIDERATIONS:
+   - For PRN and certain healthcare roles, prioritize recent, direct healthcare experience
+   - Recency may influence ranking but does NOT override minimum requirements unless specified
+
+7. EXPERIENCE VALIDATION & TRANSPARENCY:
+   - Use employment dates to calculate total years accurately, identify gaps, and prevent overstated cumulative experience
+   - If duties are missing and only title is listed: Use title cautiously and flag for review when unclear
+   - If multiple resumes are uploaded: Be aware that relying only on the most recent version may omit key information (education/certifications). Flag inconsistencies when detected.
+   - When required information is incomplete or inconsistent, apply "Flag for Further Review"
+
+8. AMBIGUITY & CONSERVATIVE HANDLING:
+   When relevance or qualification cannot be confidently determined due to:
+   - Missing duties
+   - Implied but unlisted certifications
+   - Borderline experience alignment
+   - Incomplete documentation
+   - Resume inconsistencies
+   → Apply "Flag for Further Review" rather than automatic rejection
+   The goal is to reduce false negatives while maintaining qualification integrity.
+
+`;
+
+// Condensed version for role relevance (faster evaluation)
+const SCREENING_LOGIC_CONDENSED = `
+RELEVANCE RULES:
+- Use duties to determine relevance; if no duties provided, use job title
+- RN roles: Only count post-licensure RN experience
+- LVN/PCT/MA: Only count if duties align with requirements
+- Internships/Residencies/Fellowships: Include but explicitly call out
+- Volunteer/unpaid experience does NOT count toward required years
+- When unclear, flag for review instead of auto-rejecting
+`;
 
 // ─── Schemas ──────────────────────────────────────────────
 
@@ -59,7 +162,7 @@ const expectationsSchema = z.object({
   checks: z.array(
     z.object({
       expectation: z.string(),
-      category: z.enum(["minimum", "preferred"]),
+      category: z.enum(["minimum", "preferred", "upon_hire", "after_hire"]),
       status: z.enum(["Met", "Partially Met", "Not Evident"]),
       evidence: z.string(),
     })
@@ -110,6 +213,7 @@ async function extractTextFromBuffer(
 async function parseResumeWithAI(resumeText: string): Promise<ParsedResume> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic parsing
     output: Output.object({ schema: parsedResumeSchema }),
     prompt: `Parse the following resume and extract structured information.
 
@@ -147,6 +251,7 @@ async function evaluateRoleRelevance(
 
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: roleRelevanceSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable relevance evaluation. For EACH role below, determine if it is RELEVANT to what the job posting EXPLICITLY requires.
 
@@ -160,6 +265,12 @@ STRICT RULES:
 - Generic administrative or supervisory experience is NOT relevant unless the job posting explicitly asks for it.
 - "Relevant" means the daily duties align with what the job posting explicitly describes.
 - Do NOT reward or penalize based on inferred requirements -- only what the posting states.
+
+TITLE-BASED FALLBACK (when responsibilities are not provided):
+- If a role does NOT list specific responsibilities/duties (empty or minimal bullets), USE THE JOB TITLE to determine relevance.
+- Match job titles against the target role requirements (e.g., "RN" or "Registered Nurse" title matches RN requirements, "Staff Nurse" matches nursing requirements).
+- This allows evaluation even when resumes only show employer, title, and dates without detailed duty descriptions.
+${SCREENING_LOGIC_CONDENSED}
 ${correctionRulesForRelevance}
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -194,8 +305,40 @@ For each role you MUST return:
 
 function buildStructuredRequirements(
   csvRow: RequisitionCSVRow
-): { category: "minimum" | "preferred"; text: string }[] {
-  const reqs: { category: "minimum" | "preferred"; text: string }[] = [];
+): { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] {
+  const reqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[] = [];
+  
+  // Helper to detect upon_hire / after_hire / preferred requirements
+  // IMPORTANT: Only mark as "preferred" if it has explicit "pref" prefix
+  const categorizeRequirement = (text: string): "minimum" | "preferred" | "upon_hire" | "after_hire" => {
+    const lower = text.toLowerCase();
+    const trimmedLower = lower.trim();
+    
+    // PREFERRED: Only if explicitly prefixed with "pref" or "preferred"
+    if (trimmedLower.startsWith("pref") || trimmedLower.startsWith("preferred")) {
+      return "preferred";
+    }
+    
+    // Check for "upon hire" patterns
+    if (lower.includes("upon hire") || lower.includes("at hire") || lower.includes("at time of hire")) {
+      return "upon_hire";
+    }
+    
+    // Check for "after hire" / "within X days/months/years" patterns
+    if (lower.includes("after hire") || lower.includes("within") || 
+        /within\s+\d+\s*(day|week|month|year)/i.test(text) ||
+        lower.includes("during orientation") || lower.includes("post-hire")) {
+      return "after_hire";
+    }
+    
+    // BCLS (Basic Cardiac Life Support) is typically obtained after hire
+    if (lower.includes("bcls") || lower.includes("basic cardiac life support")) {
+      return "after_hire";
+    }
+    
+    // Default to minimum - if no "pref" prefix, it's a minimum requirement
+    return "minimum";
+  };
 
   // Minimum experience
   if (csvRow.minYearsExperience) {
@@ -214,12 +357,14 @@ function buildStructuredRequirements(
   }
 
   // Required certifications (may be comma-separated list)
+  // Detect "upon hire" / "after hire" patterns to categorize appropriately
   if (csvRow.certificationsRequired) {
     for (const cert of csvRow.certificationsRequired.split(",")) {
       const trimmed = cert.trim();
       if (trimmed) {
+        const certCategory = categorizeRequirement(trimmed);
         reqs.push({
-          category: "minimum",
+          category: certCategory,
           text: `Required certification/license: ${trimmed}`,
         });
       }
@@ -234,12 +379,13 @@ function buildStructuredRequirements(
         // Avoid duplicates with certificationsRequired
         const alreadyHas = reqs.some(
           (r) =>
-            r.category === "minimum" &&
+            (r.category === "minimum" || r.category === "upon_hire" || r.category === "after_hire") &&
             r.text.toLowerCase().includes(trimmed.toLowerCase())
         );
         if (!alreadyHas) {
+          const certCategory = categorizeRequirement(trimmed);
           reqs.push({
-            category: "minimum",
+            category: certCategory,
             text: `Required certification: ${trimmed}`,
           });
         }
@@ -335,7 +481,7 @@ function buildStructuredRequirements(
 
 async function evaluateExpectationsStructured(
   resumeText: string,
-  structuredReqs: { category: "minimum" | "preferred"; text: string }[],
+  structuredReqs: { category: "minimum" | "preferred" | "upon_hire" | "after_hire"; text: string }[],
   jobQualificationsText: string,
   correctionRulesForExpectations: string = ""
 ): Promise<ExpectationCheck[]> {
@@ -348,17 +494,23 @@ async function evaluateExpectationsStructured(
 
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: expectationsSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
 The following requirements have been pre-categorized from the employer's structured requisition data.
-Each requirement is labeled as either [MINIMUM] (required/must-have) or [PREFERRED] (nice-to-have).
+Each requirement is labeled with one of the following categories:
+- [MINIMUM] = required/must-have (determines eligibility)
+- [PREFERRED] = nice-to-have (ranking only, does not disqualify)
+- [UPON_HIRE] = certification/requirement expected at start of employment (does NOT disqualify candidates who don't have it yet)
+- [AFTER_HIRE] = certification/requirement to be obtained within X days/months after hire (does NOT disqualify candidates who don't have it yet)
 
 STRUCTURED REQUIREMENTS (use these EXACT requirements and categories -- do NOT add, remove, or re-categorize):
 ${reqList}
 
 ADDITIONAL JOB CONTEXT (for understanding role duties, NOT for adding new requirements):
 ${jobQualificationsText}
+${SCREENING_LOGIC_RULES}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
@@ -369,7 +521,8 @@ For EACH numbered requirement above, evaluate the resume:
 - "Not Evident" = no evidence found in the resume
 
 IMPORTANT:
-- Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred").
+- Use the category exactly as labeled ([MINIMUM] -> "minimum", [PREFERRED] -> "preferred", [UPON_HIRE] -> "upon_hire", [AFTER_HIRE] -> "after_hire").
+- For UPON_HIRE and AFTER_HIRE requirements: These are informational. Candidates WITHOUT these certifications are STILL ELIGIBLE. Mark "Met" if they have it, "Not Evident" if they don't, but this does NOT disqualify them.
 - For "Met": Quote or closely paraphrase the specific resume text that satisfies it.
 - For "Partially Met": Describe what the resume shows AND what gap remains.
 - For "Not Evident": Leave evidence as empty string.
@@ -387,19 +540,24 @@ async function evaluateExpectations(
 ): Promise<ExpectationCheck[]> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: expectationsSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
 CRITICAL RULES:
 1. ONLY evaluate against requirements that are EXPLICITLY STATED in the job posting below. Do NOT infer, assume, or add requirements that are not written in the posting.
-2. Classify each requirement as either "minimum" or "preferred":
-   - "minimum" = the posting says "required", "must have", "minimum", "mandatory", or lists it as a basic qualification
-   - "preferred" = the posting says "preferred", "desired", "nice to have", "plus", "ideally", or lists it under preferred qualifications
-   - If the posting does not clearly distinguish, treat it as "minimum" by default.
-3. A candidate must NOT be penalized for missing a "preferred" requirement. Only "minimum" requirements affect the core evaluation.
+2. Classify each requirement into one of these categories:
+   - "minimum" = DEFAULT category. Any requirement without explicit "pref" prefix is minimum.
+   - "preferred" = ONLY if the requirement has explicit "pref" or "preferred" prefix. It is valid for postings to have NO preferred requirements.
+   - "upon_hire" = certifications/requirements that say "upon hire", "at hire", "at time of hire" -- candidate can obtain at start
+   - "after_hire" = certifications/requirements that say "within X days/months", "after hire", "during orientation", "post-hire" -- candidate can obtain after starting. BCLS (Basic Cardiac Life Support) is ALWAYS "after_hire" by default.
+3. A candidate must NOT be penalized for missing a "preferred", "upon_hire", or "after_hire" requirement. Only "minimum" requirements affect the core evaluation.
+4. Common certifications like BLS, ACLS, PALS, NRP, BCLS are often "upon_hire" or "after_hire" in healthcare roles -- check the posting language carefully. BCLS specifically should default to "after_hire".
+5. When evaluating experience relevance and responsibilities are NOT provided, USE THE JOB TITLE to determine relevance.
 
 JOB REQUIREMENTS (posted text):
 ${jobRequirements}
+${SCREENING_LOGIC_RULES}
 ${correctionRulesForExpectations}
 RESUME TEXT:
 ${resumeText}
@@ -414,6 +572,7 @@ IMPORTANT:
 - For "Partially Met": Describe what the resume shows AND what gap remains.
 - For "Not Evident": Leave evidence as empty string.
 - Do NOT fabricate requirements. Every expectation you return must be traceable to specific text in the job posting.
+- For UPON_HIRE and AFTER_HIRE categories: "Not Evident" does NOT disqualify the candidate.
 
 Return all requirements found in the posting (typically 8-20).`,
   });
@@ -501,9 +660,12 @@ function computeExperience(
   totalMonths: number;
   relevantYears: number;
   relevantMonths: number;
+  hasUnevaluatedRoles: boolean;
+  unevaluatedRolesCount: number;
 } {
   let totalMonthsCount = 0;
   let relevantMonthsCount = 0;
+  let unevaluatedCount = 0;
   const roleRelevance: RoleRelevance[] = [];
 
   for (const role of workExperience) {
@@ -511,13 +673,28 @@ function computeExperience(
     const end = parseMonthYear(role.endDate);
     const duration = start && end ? monthsBetweenInclusive(start, end) : 0;
 
-    const relevance = relevanceResults.find(
+    // Try to find relevance by exact match first, then by fuzzy match
+    let relevance = relevanceResults.find(
       (r) => r.employer === role.employer && r.title === role.title
     );
+    
+    // If no exact match, try fuzzy matching (case-insensitive, partial match)
+    if (!relevance) {
+      relevance = relevanceResults.find(
+        (r) => 
+          r.employer.toLowerCase().includes(role.employer.toLowerCase()) ||
+          role.employer.toLowerCase().includes(r.employer.toLowerCase()) ||
+          r.title.toLowerCase().includes(role.title.toLowerCase()) ||
+          role.title.toLowerCase().includes(r.title.toLowerCase())
+      );
+    }
+    
+    const isUnevaluated = !relevance;
     const isRelevant = relevance?.isRelevant ?? false;
 
     totalMonthsCount += duration;
     if (isRelevant) relevantMonthsCount += duration;
+    if (isUnevaluated) unevaluatedCount++;
 
     roleRelevance.push({
       employer: role.employer,
@@ -525,8 +702,9 @@ function computeExperience(
       startDate: role.startDate,
       endDate: role.endDate,
       isRelevant,
-      reason: relevance?.reason || "Not evaluated",
+      reason: relevance?.reason || "Not evaluated - AI did not return evaluation for this role",
       durationMonths: duration,
+      unevaluated: isUnevaluated,
     });
   }
 
@@ -539,54 +717,318 @@ function computeExperience(
     totalMonths: total.months,
     relevantYears: relevant.years,
     relevantMonths: relevant.months,
+    hasUnevaluatedRoles: unevaluatedCount > 0,
+    unevaluatedRolesCount: unevaluatedCount,
   };
 }
 
-// ─── Overall match ────────────────────────────────────────
+// ─── Education Level Ranking ──────────────────────────────
+
+const EDUCATION_LEVELS: Record<string, number> = {
+  "high school": 1,
+  "ged": 1,
+  "diploma": 1,
+  "certificate": 2,
+  "associate": 3,
+  "associates": 3,
+  "adn": 3,
+  "asn": 3,
+  "bachelor": 4,
+  "bachelors": 4,
+  "bsn": 4,
+  "bs": 4,
+  "ba": 4,
+  "master": 5,
+  "masters": 5,
+  "msn": 5,
+  "ms": 5,
+  "ma": 5,
+  "mba": 5,
+  "doctorate": 6,
+  "doctoral": 6,
+  "phd": 6,
+  "dnp": 6,
+  "md": 6,
+  "do": 6,
+  "jd": 6,
+};
+
+function getEducationLevel(degreeString: string): number {
+  const lower = degreeString.toLowerCase();
+  for (const [key, level] of Object.entries(EDUCATION_LEVELS)) {
+    if (lower.includes(key)) return level;
+  }
+  return 0;
+}
+
+function getHighestEducation(educationList: { degree: string }[]): string {
+  if (!educationList || educationList.length === 0) return "Not specified";
+  
+  let highest = educationList[0];
+  let highestLevel = getEducationLevel(highest.degree);
+  
+  for (const edu of educationList) {
+    const level = getEducationLevel(edu.degree);
+    if (level > highestLevel) {
+      highest = edu;
+      highestLevel = level;
+    }
+  }
+  
+  return highest.degree || "Not specified";
+}
+
+// ─── Overall match & Score Calculation ────────────────────
 
 function computeOverallMatch(
   expectations: ExpectationCheck[],
-  relevantMonthsTotal: number
+  relevantMonthsTotal: number,
+  parsedResume: ParsedResume,
+  csvRow?: RequisitionCSVRow
 ): {
   match: "Strong" | "Medium" | "Weak";
   metCount: number;
   missingCount: number;
   minimumScore: number;
   preferredScore: number;
+  scoreBreakdown: ScoreBreakdown;
 } {
-  // Split into minimum vs preferred
+  // Split into categories
   const minimumReqs = expectations.filter((e) => e.category === "minimum");
   const preferredReqs = expectations.filter((e) => e.category === "preferred");
-
-  // Score minimum requirements (these determine the match)
+  
+  // Overall counts
+  const metCount = expectations.filter((e) => e.status === "Met").length;
+  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
+  
+  // === SCORE CALCULATION LOGIC ===
+  // Base 50% for meeting ALL required criteria
+  // Remaining 50% distributed based on preferred criteria
+  
+  const highestEducation = getHighestEducation(parsedResume.education);
+  const candidateYearsExp = relevantMonthsTotal / 12;
+  
+  // Parse required years from CSV or expectations
+  let requiredYearsExp: number | undefined;
+  if (csvRow?.minYearsExperience) {
+    const match = csvRow.minYearsExperience.match(/(\d+)/);
+    if (match) requiredYearsExp = parseInt(match[1], 10);
+  }
+  
+  // Parse required degree from CSV or expectations
+  let requiredDegree: string | undefined;
+  if (csvRow?.educationNeeded) {
+    requiredDegree = csvRow.educationNeeded;
+  }
+  
+  // Required certifications from expectations
+  const requiredCerts = minimumReqs.filter(
+    (e) => e.expectation.toLowerCase().includes("certification") || 
+           e.expectation.toLowerCase().includes("license") ||
+           e.expectation.toLowerCase().includes("bls") ||
+           e.expectation.toLowerCase().includes("acls")
+  );
+  const requiredCertsCount = requiredCerts.length;
+  const candidateCertsMatchedCount = requiredCerts.filter(
+    (e) => e.status === "Met"
+  ).length;
+  
+  // Skills from expectations (if any skill-related requirements)
+  const skillReqs = minimumReqs.filter(
+    (e) => e.expectation.toLowerCase().includes("skill") ||
+           e.expectation.toLowerCase().includes("proficient") ||
+           e.expectation.toLowerCase().includes("experience with")
+  );
+  const totalSkillsRequired = skillReqs.length;
+  const skillsMatched = skillReqs.filter((e) => e.status === "Met").length;
+  
+  // Preferred criteria counts
+  const preferredCriteriaCount = preferredReqs.length;
+  const preferredCriteriaMetCount = preferredReqs.filter(
+    (e) => e.status === "Met" || e.status === "Partially Met"
+  ).length;
+  
+  // === CONTRIBUTION CALCULATIONS (0-1 scale) ===
+  // Rules: 1 = all values match, 0.5-0.9 = partial match, 0 = no match
+  
+  // Helper function for contribution calculation
+  const calculateContribution = (matched: number, required: number): number => {
+    if (required === 0) return 1; // No requirement = full credit
+    if (matched === 0) return 0; // No match = 0
+    const ratio = matched / required;
+    if (ratio >= 1) return 1; // All values match
+    if (ratio >= 0.9) return 0.9;
+    if (ratio >= 0.75) return 0.8;
+    if (ratio >= 0.6) return 0.7;
+    if (ratio >= 0.5) return 0.6;
+    return 0.5; // Partial match (less than 50%)
+  };
+  
+  // Years of experience contribution
+  let yearsExpContribution = 0;
+  if (requiredYearsExp === undefined || requiredYearsExp === 0) {
+    // No required years specified
+    yearsExpContribution = candidateYearsExp > 0 ? 1 : 0;
+  } else if (candidateYearsExp >= requiredYearsExp) {
+    yearsExpContribution = 1; // All values match
+  } else if (candidateYearsExp === 0) {
+    yearsExpContribution = 0; // No match
+  } else {
+    // Partial match (0.5-0.9)
+    yearsExpContribution = calculateContribution(candidateYearsExp, requiredYearsExp);
+  }
+  
+  // Education contribution
+  let educationContribution = 0;
+  if (!requiredDegree) {
+    // No required degree specified
+    educationContribution = highestEducation !== "Not specified" ? 1 : 0;
+  } else {
+    const requiredLevel = getEducationLevel(requiredDegree);
+    const candidateLevel = getEducationLevel(highestEducation);
+    if (candidateLevel >= requiredLevel) {
+      educationContribution = 1; // All values match
+    } else if (candidateLevel === 0) {
+      educationContribution = 0; // No match
+    } else {
+      // Partial match based on level difference
+      const diff = requiredLevel - candidateLevel;
+      if (diff === 1) educationContribution = 0.8;
+      else if (diff === 2) educationContribution = 0.6;
+      else educationContribution = 0.5;
+    }
+  }
+  
+  // Certifications contribution
+  const certsContribution = calculateContribution(candidateCertsMatchedCount, requiredCertsCount);
+  
+  // Skills contribution
+  const skillsContribution = calculateContribution(skillsMatched, totalSkillsRequired);
+  
+  // Preferred experience contribution
+  const preferredExpContribution = calculateContribution(preferredCriteriaMetCount, preferredCriteriaCount);
+  
+  // === DETERMINE IF MEETS ALL REQUIRED CRITERIA (STRICT) ===
+  // Required criteria: Years of Experience, Required Degree, Required Certifications
+  // ALL must be met for base 50%, otherwise score = 0
+  
+  const missingRequiredCriteria: string[] = [];
+  
+  // Check Required Years of Experience
+  const meetsYearsReq = requiredYearsExp === undefined || candidateYearsExp >= requiredYearsExp;
+  if (!meetsYearsReq) {
+    missingRequiredCriteria.push(`Required ${requiredYearsExp} years experience (has ${Math.round(candidateYearsExp * 10) / 10})`);
+  }
+  
+  // Check Required Degree
+  let meetsDegreeReq = true;
+  if (requiredDegree) {
+    const requiredLevel = getEducationLevel(requiredDegree);
+    const candidateLevel = getEducationLevel(highestEducation);
+    meetsDegreeReq = candidateLevel >= requiredLevel;
+    if (!meetsDegreeReq) {
+      missingRequiredCriteria.push(`Required ${requiredDegree} (has ${highestEducation})`);
+    }
+  }
+  
+  // Check Required Certifications (all must be Met)
+  const meetsCertsReq = requiredCertsCount === 0 || candidateCertsMatchedCount === requiredCertsCount;
+  if (!meetsCertsReq) {
+    const missingCerts = requiredCerts.filter((e) => e.status !== "Met").map((e) => e.expectation);
+    missingRequiredCriteria.push(`Missing certifications: ${missingCerts.slice(0, 2).join(", ")}${missingCerts.length > 2 ? ` (+${missingCerts.length - 2})` : ""}`);
+  }
+  
+  // Final determination: ALL required criteria must be met
+  const meetsMinimum = meetsYearsReq && meetsDegreeReq && meetsCertsReq;
+  
+  // Build rejection reason if doesn't meet minimum
+  let rejectionReason: string | undefined;
+  if (!meetsMinimum) {
+    rejectionReason = missingRequiredCriteria.join("; ");
+  }
+  
+  // === FINAL SCORE CALCULATION (STRICT RULES) ===
+  // Rule: If ANY required criteria is missing → score = 0
+  // Rule: If ALL required criteria met → base 50%
+  // Rule: Remaining 50% = (preferred criteria met / total preferred criteria) * 50%
+  
+  let finalScore = 0;
+  if (meetsMinimum) {
+    // Base 50% for meeting ALL required criteria
+    const baseScore = 50;
+    
+    // Preferred criteria: Preferred Experience + Skills
+    // Calculate percentage of preferred criteria met
+    const totalPreferredCount = preferredCriteriaCount + totalSkillsRequired;
+    const totalPreferredMet = preferredCriteriaMetCount + skillsMatched;
+    
+    let preferredPercentage = 0;
+    if (totalPreferredCount > 0) {
+      preferredPercentage = totalPreferredMet / totalPreferredCount;
+    } else {
+      // No preferred criteria defined, give full bonus
+      preferredPercentage = 1;
+    }
+    
+    // Remaining 50% distributed based on preferred percentage
+    const preferredBonus = Math.round(50 * preferredPercentage);
+    
+    finalScore = baseScore + preferredBonus;
+  }
+  
+  // Ensure score is between 0-100
+  finalScore = Math.max(0, Math.min(100, finalScore));
+  
+  // === LEGACY SCORES (for backward compatibility) ===
   const minMet = minimumReqs.filter((e) => e.status === "Met").length;
   const minPartial = minimumReqs.filter((e) => e.status === "Partially Met").length;
   const minTotal = minimumReqs.length || 1;
   const minimumScore = (minMet + minPartial * 0.5) / minTotal;
-
-  // Score preferred requirements (bonus only, cannot hurt)
+  
   const prefMet = preferredReqs.filter((e) => e.status === "Met").length;
   const prefPartial = preferredReqs.filter((e) => e.status === "Partially Met").length;
   const prefTotal = preferredReqs.length || 1;
   const preferredScore = preferredReqs.length > 0
     ? (prefMet + prefPartial * 0.5) / prefTotal
     : 0;
-
-  // Overall counts (across all requirements for display)
-  const metCount = expectations.filter((e) => e.status === "Met").length;
-  const missingCount = expectations.filter((e) => e.status === "Not Evident").length;
-
-  // Match is determined ONLY by minimum requirements + relevant experience
+  
+  // Determine match category
   let match: "Strong" | "Medium" | "Weak";
-  if (minimumScore >= 0.7 && relevantMonthsTotal >= 12) {
+  if (finalScore >= 70) {
     match = "Strong";
-  } else if (minimumScore >= 0.4) {
+  } else if (finalScore >= 40) {
     match = "Medium";
   } else {
     match = "Weak";
   }
-
-  return { match, metCount, missingCount, minimumScore, preferredScore };
+  
+  const scoreBreakdown: ScoreBreakdown = {
+    finalScore,
+    meetsMinimum,
+    rejectionReason,
+    highestEducation,
+    contributions: {
+      yearsExperience: yearsExpContribution,
+      education: educationContribution,
+      certifications: certsContribution,
+      skills: skillsContribution,
+      preferredExperience: preferredExpContribution,
+    },
+    details: {
+      requiredYearsExp,
+      candidateYearsExp: Math.round(candidateYearsExp * 10) / 10,
+      requiredDegree,
+      candidateDegree: highestEducation,
+      requiredCertsCount,
+      candidateCertsMatchedCount,
+      totalSkillsRequired,
+      skillsMatched,
+      preferredCriteriaCount,
+      preferredCriteriaMetCount,
+    },
+  };
+  
+  return { match, metCount, missingCount, minimumScore, preferredScore, scoreBreakdown };
 }
 
 // ─── POST handler ─────────────────────────────────────────
@@ -742,7 +1184,7 @@ export async function POST(req: Request) {
         );
 
         let processed = 0;
-        const BATCH_SIZE = 3; // Process 3 resumes concurrently
+        const BATCH_SIZE = 5; // Process 5 resumes concurrently for faster evaluation
 
         // Helper to send a message
         const send = (msg: Record<string, unknown>) => {
@@ -849,9 +1291,11 @@ export async function POST(req: Request) {
             // 6. Overall match
             const totalRelevantMonths =
               experience.relevantYears * 12 + experience.relevantMonths;
-            const { match, metCount, missingCount, minimumScore, preferredScore } = computeOverallMatch(
+            const { match, metCount, missingCount, minimumScore, preferredScore, scoreBreakdown } = computeOverallMatch(
               expectations,
-              totalRelevantMonths
+              totalRelevantMonths,
+              parsed,
+              csvRow
             );
 
             // 7. Compute flags
@@ -983,10 +1427,13 @@ export async function POST(req: Request) {
               keyRequirementsMetCount: metCount,
               keyRequirementsMissingCount: missingCount,
               overallMatch: match,
+              scoreBreakdown,
               screeningRationale: rationale,
               nonRelevantExperienceCounted,
               isEdgeCase,
-              notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.`,
+              hasUnevaluatedRoles: experience.hasUnevaluatedRoles,
+              unevaluatedRolesCount: experience.unevaluatedRolesCount,
+              notes: `Processed ${parsed.workExperience.length} roles. ${gapAnalysis.gapCount} gap(s) detected.${experience.hasUnevaluatedRoles ? ` WARNING: ${experience.unevaluatedRolesCount} role(s) not evaluated.` : ""}`,
             };
 
             send({ type: "result", data: result });

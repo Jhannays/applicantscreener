@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, Fragment } from "react";
 import {
   Download,
   ChevronDown,
@@ -29,6 +29,7 @@ import {
   FolderOpen,
   Trash2,
   Sparkles,
+  BarChart3,
 } from "lucide-react";
 import type {
   ApplicantResult,
@@ -86,6 +87,8 @@ function ExpectationsTable({
 }) {
   const minimumChecks = checks.filter((c) => c.category === "minimum");
   const preferredChecks = checks.filter((c) => c.category === "preferred");
+  const uponHireChecks = checks.filter((c) => c.category === "upon_hire");
+  const afterHireChecks = checks.filter((c) => c.category === "after_hire");
   // Fallback for old data that may not have category
   const uncategorized = checks.filter((c) => !c.category);
 
@@ -171,6 +174,36 @@ function ExpectationsTable({
               {renderRows(preferredChecks)}
             </>
           )}
+          {uponHireChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-amber-500/10 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+                    Upon Hire Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (expected at start -- does not disqualify)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(uponHireChecks)}
+            </>
+          )}
+          {afterHireChecks.length > 0 && (
+            <>
+              <tr>
+                <td colSpan={3} className="bg-teal-500/10 px-3 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-teal-700">
+                    After Hire Requirements
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (within X months -- does not disqualify)
+                  </span>
+                </td>
+              </tr>
+              {renderRows(afterHireChecks)}
+            </>
+          )}
           {uncategorized.length > 0 && renderRows(uncategorized)}
         </tbody>
       </table>
@@ -184,12 +217,16 @@ function ApplicantExpandedRow({
   onChangeExpectationStatus,
   roleNotes,
   onRoleNoteChange,
+  onReevaluateRoles,
+  isReevaluating,
 }: {
   result: ApplicantResult;
   onToggleRelevance: (roleIndex: number) => void;
   onChangeExpectationStatus: (expIndex: number, newStatus: ExpectationCheck["status"]) => void;
   roleNotes: RoleNote[];
   onRoleNoteChange: (roleKey: string, note: string) => void;
+  onReevaluateRoles: () => void;
+  isReevaluating: boolean;
 }) {
   const [showFullRationale, setShowFullRationale] = useState(false);
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
@@ -197,11 +234,12 @@ function ApplicantExpandedRow({
 
   const hasOverrides = result.roleRelevance.some((r) => r.manualOverride) ||
     result.expectations.some((e) => e.manualOverride);
+  const hasUnevaluatedRoles = result.hasUnevaluatedRoles || result.roleRelevance.some((r) => r.unevaluated);
 
   return (
     <tr>
       <td
-        colSpan={11}
+        colSpan={12}
         className="border-b border-border bg-muted/10 px-4 py-5"
       >
         <div className="space-y-5">
@@ -262,6 +300,99 @@ function ApplicantExpandedRow({
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Score Breakdown */}
+          {result.scoreBreakdown && (
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h4 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <BarChart3 className="h-3.5 w-3.5" />
+                Score Breakdown
+              </h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Left side - Score visualization */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-full border-4 ${
+                      result.scoreBreakdown.finalScore >= 70
+                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                        : result.scoreBreakdown.finalScore >= 40
+                        ? "border-amber-500 bg-amber-500/10 text-amber-700"
+                        : "border-red-500 bg-red-500/10 text-red-700"
+                    }`}>
+                      <span className="text-xl font-bold">{result.scoreBreakdown.finalScore}%</span>
+                    </div>
+                    <div>
+                      <div className={`text-sm font-semibold ${
+                        result.scoreBreakdown.meetsMinimum ? "text-emerald-700" : "text-red-700"
+                      }`}>
+                        {result.scoreBreakdown.meetsMinimum ? "Meets Minimum Requirements" : "Does Not Meet Minimum Requirements"}
+                      </div>
+                      {result.scoreBreakdown.rejectionReason && (
+                        <div className="text-xs text-red-600 mt-0.5">{result.scoreBreakdown.rejectionReason}</div>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Highest Education: {result.scoreBreakdown.highestEducation}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Contribution bars */}
+                  <div className="space-y-2">
+                    {[
+                      { label: "Years Experience", value: result.scoreBreakdown.contributions.yearsExperience, detail: `${result.scoreBreakdown.details.candidateYearsExp}y${result.scoreBreakdown.details.requiredYearsExp ? ` / ${result.scoreBreakdown.details.requiredYearsExp}y req` : ""}` },
+                      { label: "Education", value: result.scoreBreakdown.contributions.education, detail: result.scoreBreakdown.details.candidateDegree },
+                      { label: "Certifications", value: result.scoreBreakdown.contributions.certifications, detail: `${result.scoreBreakdown.details.candidateCertsMatchedCount}/${result.scoreBreakdown.details.requiredCertsCount} matched` },
+                      { label: "Skills", value: result.scoreBreakdown.contributions.skills, detail: `${result.scoreBreakdown.details.skillsMatched}/${result.scoreBreakdown.details.totalSkillsRequired} matched` },
+                      { label: "Preferred Criteria", value: result.scoreBreakdown.contributions.preferredExperience, detail: `${result.scoreBreakdown.details.preferredCriteriaMetCount}/${result.scoreBreakdown.details.preferredCriteriaCount} met` },
+                    ].map(({ label, value, detail }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="w-28 text-xs text-muted-foreground">{label}</span>
+                        <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+                              value >= 0.9 ? "bg-emerald-500" : value >= 0.7 ? "bg-amber-500" : value >= 0.5 ? "bg-orange-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${value * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-20 text-right text-xs text-muted-foreground">{detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Right side - Details */}
+                <div className="space-y-2 text-xs">
+                  <div className="rounded-md bg-muted/50 p-2">
+                    <div className="font-medium text-muted-foreground mb-1">Scoring Method</div>
+                    <div className="text-foreground">
+                      Base 50% for meeting all minimum requirements + remaining 50% distributed by preferred criteria match
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Required Exp</div>
+                      <div className="font-semibold text-foreground">
+                        {result.scoreBreakdown.details.requiredYearsExp ? `${result.scoreBreakdown.details.requiredYearsExp} years` : "Not specified"}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Candidate Exp</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.candidateYearsExp} years</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Required Degree</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.requiredDegree || "Not specified"}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <div className="text-muted-foreground">Candidate Degree</div>
+                      <div className="font-semibold text-foreground">{result.scoreBreakdown.details.candidateDegree}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -326,11 +457,41 @@ function ApplicantExpandedRow({
             </div>
           </div>
 
+          {/* Unevaluated Roles Warning */}
+          {hasUnevaluatedRoles && (
+            <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <div>
+                  <span className="text-sm font-semibold text-amber-800">
+                    {result.unevaluatedRolesCount || result.roleRelevance.filter((r) => r.unevaluated).length} role(s) not evaluated
+                  </span>
+                  <p className="text-xs text-amber-700">
+                    The AI did not return evaluations for some roles. Click re-evaluate to retry.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onReevaluateRoles}
+                disabled={isReevaluating}
+                className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${isReevaluating ? "animate-spin" : ""}`} />
+                {isReevaluating ? "Re-evaluating..." : "Re-evaluate Roles"}
+              </button>
+            </div>
+          )}
+
           {/* Role Relevance */}
           <div>
             <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Briefcase className="h-3.5 w-3.5" />
               Role-by-Role Relevance
+              {hasUnevaluatedRoles && (
+                <span className="ml-2 inline-flex items-center rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  {result.unevaluatedRolesCount || result.roleRelevance.filter((r) => r.unevaluated).length} unevaluated
+                </span>
+              )}
             </h4>
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full text-sm">
@@ -355,7 +516,7 @@ function ApplicantExpandedRow({
                 </thead>
                 <tbody>
                   {result.roleRelevance.map((r, i) => (
-                    <tbody key={i}>
+                    <Fragment key={i}>
                       <tr
                         className="border-b border-border/50"
                       >
@@ -373,18 +534,25 @@ function ApplicantExpandedRow({
                           {r.durationMonths % 12}m
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onToggleRelevance(i); }}
-                            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
-                              r.isRelevant
-                                ? "bg-emerald-500/10 text-emerald-600"
-                                : "bg-red-500/10 text-red-500"
-                            }`}
-                            title="Click to toggle relevance"
-                          >
-                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
-                            {r.isRelevant ? "Relevant" : "Not Relevant"}
-                          </button>
+                          {r.unevaluated ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              Not Evaluated
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onToggleRelevance(i); }}
+                              className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
+                                r.isRelevant
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : "bg-red-500/10 text-red-500"
+                              }`}
+                              title="Click to toggle relevance"
+                            >
+                              <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                              {r.isRelevant ? "Relevant" : "Not Relevant"}
+                            </button>
+                          )}
                           {r.manualOverride && (
                             <span className="ml-1.5 inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
                               OVERRIDDEN
@@ -486,7 +654,7 @@ function ApplicantExpandedRow({
                           })()}
                         </td>
                       </tr>
-                    </tbody>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -598,6 +766,7 @@ export function ResultsDashboard({
   const [showSavedSessions, setShowSavedSessions] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SMESession[]>([]);
   const [sessionNameInput, setSessionNameInput] = useState("");
+  const [reevaluatingId, setReevaluatingId] = useState<string | null>(null);
 
   // ─── Anonymization ──────────────────────────────────────
   // Map real candidate names AND file names to anonymous labels.
@@ -619,8 +788,9 @@ export function ResultsDashboard({
     };
 
     for (const r of results) {
+      // Show real candidate names instead of anonymized labels
       if (!nameToLabel.has(r.candidateName)) {
-        nameToLabel.set(r.candidateName, `Candidate ${toLetter(nameCounter++)}`);
+        nameToLabel.set(r.candidateName, r.candidateName);
       }
       if (!fileToLabel.has(r.resumeFile)) {
         fileToLabel.set(r.resumeFile, `Resume-${toLetter(fileCounter++)}.pdf`);
@@ -780,8 +950,111 @@ export function ResultsDashboard({
         `${role.title} at ${role.employer}`,
         role.reason
       );
+  },
+  [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
+  );
+  
+  // Handler for overriding match
+  const handleOverrideMatch = useCallback(
+    (resultIndex: number, newMatch: "Strong" | "Medium" | "Weak") => {
+      const updatedResult = { ...results[resultIndex] };
+      updatedResult.overallMatch = newMatch;
+      updatedResult.matchOverride = true;
+      
+      const newResults = [...results];
+      newResults[resultIndex] = updatedResult;
+      onResultsChange(newResults);
     },
-    [results, recalculateAndUpdate, analyzeOverride, getDisplayName]
+    [results, onResultsChange]
+  );
+  
+  // Handler for overriding score
+  const handleOverrideScore = useCallback(
+    (resultIndex: number, newScore: number) => {
+      const updatedResult = { ...results[resultIndex] };
+      updatedResult.scoreBreakdown = {
+        ...updatedResult.scoreBreakdown,
+        finalScore: newScore,
+      };
+      updatedResult.scoreOverride = true;
+      
+      // Also update match based on new score
+      if (newScore >= 70) {
+        updatedResult.overallMatch = "Strong";
+      } else if (newScore >= 40) {
+        updatedResult.overallMatch = "Medium";
+      } else {
+        updatedResult.overallMatch = "Weak";
+      }
+      
+      const newResults = [...results];
+      newResults[resultIndex] = updatedResult;
+      onResultsChange(newResults);
+    },
+    [results, onResultsChange]
+  );
+
+  // Handler for re-evaluating unevaluated roles
+  const handleReevaluateRoles = useCallback(
+    async (resultIndex: number) => {
+      const result = results[resultIndex];
+      const rowId = `${result.reqId}-${result.resumeFile}`;
+      setReevaluatingId(rowId);
+      
+      try {
+        // Get unevaluated roles
+        const unevaluatedRoles = result.workExperience.filter((_, i) => 
+          result.roleRelevance[i]?.unevaluated
+        );
+        
+        if (unevaluatedRoles.length === 0) {
+          // Re-evaluate all roles if none specifically marked as unevaluated
+          const allRoles = result.workExperience;
+          const response = await fetch("/api/screen/reevaluate-roles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roles: allRoles,
+              jobRequirements: "", // Would need to pass from parent if available
+              correctionRules: correctionRules.map(r => r.rule).join("\n"),
+            }),
+          });
+          
+          if (!response.ok) throw new Error("Re-evaluation failed");
+          
+          const data = await response.json();
+          
+          // Update result with new evaluations
+          const updatedResult = { ...result };
+          const updatedRoleRelevance = [...result.roleRelevance];
+          
+          data.results.forEach((newEval: any) => {
+            const idx = updatedRoleRelevance.findIndex(
+              (r) => r.employer === newEval.employer && r.title === newEval.title
+            );
+            if (idx !== -1) {
+              updatedRoleRelevance[idx] = {
+                ...updatedRoleRelevance[idx],
+                isRelevant: newEval.isRelevant,
+                reason: newEval.reason,
+                unevaluated: newEval.unevaluated,
+              };
+            }
+          });
+          
+          updatedResult.roleRelevance = updatedRoleRelevance;
+          updatedResult.hasUnevaluatedRoles = data.stillUnevaluated > 0;
+          updatedResult.unevaluatedRolesCount = data.stillUnevaluated;
+          
+          recalculateAndUpdate(resultIndex, updatedResult);
+        }
+      } catch (err) {
+        console.error("Re-evaluation failed:", err);
+      } finally {
+        setReevaluatingId(null);
+      }
+    },
+    [results, correctionRules, recalculateAndUpdate]
   );
 
   const handleChangeExpectationStatus = useCallback(
@@ -874,6 +1147,10 @@ export function ResultsDashboard({
           return (
             dir * (a.keyRequirementsMetCount - b.keyRequirementsMetCount)
           );
+        case "score":
+          return (
+            dir * ((a.scoreBreakdown?.finalScore || 0) - (b.scoreBreakdown?.finalScore || 0))
+          );
         default:
           return 0;
       }
@@ -917,9 +1194,10 @@ export function ResultsDashboard({
       "Education",
       "Skills",
       "Relevant Years of Experience",
-      "Certifications",
-      "Overall Match",
-      "Gap Present? (Y/N)",
+    "Certifications",
+    "Score",
+    "Overall Match",
+    "Gap Present? (Y/N)",
       "Non-Relevant Experience Counted? (Y/N)",
       "Edge Case? (Y/N)",
       "Relevance Reasoning",
@@ -954,7 +1232,8 @@ export function ResultsDashboard({
         csvEscape(skillsStr || "N/A"),
         csvEscape(yoeStr),
         csvEscape(certsStr || "N/A"),
-        csvEscape(r.overallMatch),
+        `${r.scoreBreakdown?.finalScore || 0}%${r.scoreOverride ? " (Override)" : ""}`,
+        csvEscape(r.overallMatch + (r.matchOverride ? " (Override)" : "")),
         gapPresent,
         nonRelevant,
         edgeCase,
@@ -1030,9 +1309,11 @@ export function ResultsDashboard({
     results.forEach((r) => {
       md += `## ${getDisplayName(r.candidateName)} (REQ ${r.reqId})\n\n`;
       md += `**File:** ${getDisplayFile(r.resumeFile)}\n\n`;
-      md += `**Overall Match:** ${r.overallMatch}\n`;
-      md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
-      md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n\n`;
+    md += `**Overall Match:** ${r.overallMatch}${r.matchOverride ? " (Override)" : ""} (Score: ${r.scoreBreakdown?.finalScore || 0}%${r.scoreOverride ? " Override" : ""})\n`;
+    md += `**Meets Minimum:** ${r.scoreBreakdown?.meetsMinimum ? "Yes" : "No"}${r.scoreBreakdown?.rejectionReason ? ` - ${r.scoreBreakdown.rejectionReason}` : ""}\n`;
+    md += `**Relevant Experience:** ${r.relevantYears} years ${r.relevantMonths} months\n`;
+    md += `**Total Experience:** ${r.totalYears} years ${r.totalMonths} months\n`;
+    md += `**Highest Education:** ${r.scoreBreakdown?.highestEducation || "Not specified"}\n\n`;
 
       if (r.screeningRationale) {
         md += "### Screening Rationale\n\n";
@@ -1073,12 +1354,64 @@ export function ResultsDashboard({
 
       if (r.expectations.length > 0) {
         md += "### Job Expects vs Resume Shows\n\n";
-        md += "| Expectation | Status | Evidence |\n";
-        md += "|-------------|--------|----------|\n";
-        r.expectations.forEach((e) => {
-          md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
-        });
-        md += "\n";
+        
+        const minReqs = r.expectations.filter((e) => e.category === "minimum");
+        const prefReqs = r.expectations.filter((e) => e.category === "preferred");
+        const uponHireReqs = r.expectations.filter((e) => e.category === "upon_hire");
+        const afterHireReqs = r.expectations.filter((e) => e.category === "after_hire");
+        const uncatReqs = r.expectations.filter((e) => !e.category);
+        
+        if (minReqs.length > 0) {
+          md += "#### Minimum Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          minReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (prefReqs.length > 0) {
+          md += "#### Preferred Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          prefReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (uponHireReqs.length > 0) {
+          md += "#### Upon Hire Requirements\n";
+          md += "_Expected at start -- does not disqualify_\n\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          uponHireReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (afterHireReqs.length > 0) {
+          md += "#### After Hire Requirements\n";
+          md += "_Within X months -- does not disqualify_\n\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          afterHireReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
+        
+        if (uncatReqs.length > 0) {
+          md += "#### Other Requirements\n";
+          md += "| Expectation | Status | Evidence |\n";
+          md += "|-------------|--------|----------|\n";
+          uncatReqs.forEach((e) => {
+            md += `| ${e.expectation} | ${e.status} | ${e.evidence || "--"} |\n`;
+          });
+          md += "\n";
+        }
       }
 
       md += "---\n\n";
@@ -1491,11 +1824,13 @@ export function ResultsDashboard({
 
       {/* SME Review Notes Panel */}
       <div className="rounded-lg border border-border bg-card">
-        <button
-          onClick={() => setSmePanelOpen(!smePanelOpen)}
-          className="flex w-full items-center justify-between px-4 py-3 text-left"
+        <div
+          className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left"
         >
-          <div className="flex items-center gap-2">
+          <div 
+            className="flex flex-1 items-center gap-2"
+            onClick={() => setSmePanelOpen(!smePanelOpen)}
+          >
             <NotebookPen className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">
               SME Review Notes
@@ -1514,8 +1849,7 @@ export function ResultsDashboard({
           <div className="flex items-center gap-2">
             {/* Save / Load buttons */}
             <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 const name = sessionNameInput.trim() || `Session ${new Date().toLocaleDateString()}`;
                 saveSession(name);
                 setSessionNameInput("");
@@ -1527,8 +1861,7 @@ export function ResultsDashboard({
               Save
             </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 loadSavedSessions();
                 setShowSavedSessions(!showSavedSessions);
               }}
@@ -1538,13 +1871,18 @@ export function ResultsDashboard({
               <FolderOpen className="h-3 w-3" />
               Load
             </button>
-            {smePanelOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
+            <div 
+              onClick={() => setSmePanelOpen(!smePanelOpen)}
+              className="cursor-pointer"
+            >
+              {smePanelOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
           </div>
-        </button>
+        </div>
 
         {smePanelOpen && (
           <div className="border-t border-border px-4 py-3 space-y-3">
@@ -1803,6 +2141,9 @@ export function ResultsDashboard({
                   </span>
                 </th>
                 <th className="px-3 py-3 text-left">
+                  <SortButton label="Score" sortKeyName="score" />
+                </th>
+                <th className="px-3 py-3 text-left">
                   <SortButton label="Match" sortKeyName="match" />
                 </th>
               </tr>
@@ -1812,7 +2153,7 @@ export function ResultsDashboard({
                 const rowId = `${result.reqId}-${result.resumeFile}`;
                 const isExpanded = expandedId === rowId;
                 return (
-                  <tbody key={rowId}>
+                  <Fragment key={rowId}>
                     <tr
                       onClick={() =>
                         setExpandedId(isExpanded ? null : rowId)
@@ -1903,11 +2244,76 @@ export function ResultsDashboard({
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${matchStyles[result.overallMatch] || ""}`}
-                        >
-                          {result.overallMatch}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="relative h-2 w-16 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+                                (result.scoreBreakdown?.finalScore || 0) >= 70
+                                  ? "bg-emerald-500"
+                                  : (result.scoreBreakdown?.finalScore || 0) >= 40
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                              }`}
+                              style={{ width: `${result.scoreBreakdown?.finalScore || 0}%` }}
+                            />
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const globalIndex = results.indexOf(result);
+                              if (globalIndex !== -1) {
+                                const currentScore = result.scoreBreakdown?.finalScore || 0;
+                                const newScoreStr = prompt("Enter new score (0-100):", String(currentScore));
+                                if (newScoreStr !== null) {
+                                  const newScore = Math.max(0, Math.min(100, parseInt(newScoreStr, 10) || 0));
+                                  handleOverrideScore(globalIndex, newScore);
+                                }
+                              }
+                            }}
+                            className={`inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold transition-all hover:ring-2 hover:ring-primary/30 ${
+                              (result.scoreBreakdown?.finalScore || 0) >= 70
+                                ? "text-emerald-700 hover:bg-emerald-500/10"
+                                : (result.scoreBreakdown?.finalScore || 0) >= 40
+                                ? "text-amber-700 hover:bg-amber-500/10"
+                                : "text-red-700 hover:bg-red-500/10"
+                            }`}
+                            title="Click to override score"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                            {result.scoreBreakdown?.finalScore || 0}%
+                          </button>
+                          {result.scoreOverride && (
+                            <span className="inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                              OVR
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const globalIndex = results.indexOf(result);
+                              if (globalIndex !== -1) {
+                                const matchOrder: ("Strong" | "Medium" | "Weak")[] = ["Strong", "Medium", "Weak"];
+                                const currentIdx = matchOrder.indexOf(result.overallMatch);
+                                const nextIdx = (currentIdx + 1) % matchOrder.length;
+                                handleOverrideMatch(globalIndex, matchOrder[nextIdx]);
+                              }
+                            }}
+                            className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-primary/30 ${matchStyles[result.overallMatch] || ""}`}
+                            title="Click to override match"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5 opacity-50" />
+                            {result.overallMatch}
+                          </button>
+                          {result.matchOverride && (
+                            <span className="inline-flex items-center rounded bg-blue-500/10 px-1 py-0.5 text-[10px] font-medium text-blue-700">
+                              OVERRIDDEN
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && (
@@ -1923,9 +2329,14 @@ export function ResultsDashboard({
                         }}
                         roleNotes={roleNotes}
                         onRoleNoteChange={onRoleNoteChange}
+                        onReevaluateRoles={() => {
+                          const globalIndex = results.indexOf(result);
+                          if (globalIndex !== -1) handleReevaluateRoles(globalIndex);
+                        }}
+                        isReevaluating={reevaluatingId === rowId}
                       />
                     )}
-                  </tbody>
+                  </Fragment>
                 );
               })}
             </tbody>
