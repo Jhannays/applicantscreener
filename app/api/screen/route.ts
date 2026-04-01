@@ -111,6 +111,17 @@ SCREENING LOGIC RULES (APPLY TO ALL CANDIDATE EVALUATIONS):
 
 `;
 
+// Condensed version for role relevance (faster evaluation)
+const SCREENING_LOGIC_CONDENSED = `
+RELEVANCE RULES:
+- Use duties to determine relevance; if no duties provided, use job title
+- RN roles: Only count post-licensure RN experience
+- LVN/PCT/MA: Only count if duties align with requirements
+- Internships/Residencies/Fellowships: Include but explicitly call out
+- Volunteer/unpaid experience does NOT count toward required years
+- When unclear, flag for review instead of auto-rejecting
+`;
+
 // ─── Schemas ──────────────────────────────────────────────
 
 const parsedResumeSchema = z.object({
@@ -202,6 +213,7 @@ async function extractTextFromBuffer(
 async function parseResumeWithAI(resumeText: string): Promise<ParsedResume> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic parsing
     output: Output.object({ schema: parsedResumeSchema }),
     prompt: `Parse the following resume and extract structured information.
 
@@ -239,6 +251,7 @@ async function evaluateRoleRelevance(
 
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: roleRelevanceSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable relevance evaluation. For EACH role below, determine if it is RELEVANT to what the job posting EXPLICITLY requires.
 
@@ -257,7 +270,7 @@ TITLE-BASED FALLBACK (when responsibilities are not provided):
 - If a role does NOT list specific responsibilities/duties (empty or minimal bullets), USE THE JOB TITLE to determine relevance.
 - Match job titles against the target role requirements (e.g., "RN" or "Registered Nurse" title matches RN requirements, "Staff Nurse" matches nursing requirements).
 - This allows evaluation even when resumes only show employer, title, and dates without detailed duty descriptions.
-${SCREENING_LOGIC_RULES}
+${SCREENING_LOGIC_CONDENSED}
 ${correctionRulesForRelevance}
 JOB REQUIREMENTS:
 ${jobRequirements}
@@ -481,6 +494,7 @@ async function evaluateExpectationsStructured(
 
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: expectationsSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
@@ -526,6 +540,7 @@ async function evaluateExpectations(
 ): Promise<ExpectationCheck[]> {
   const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    temperature: 0.1, // Low temperature for faster, more deterministic evaluation
     output: Output.object({ schema: expectationsSchema }),
     prompt: `You are an expert HR recruiter performing a transparent, auditable evaluation.
 
@@ -1169,7 +1184,7 @@ export async function POST(req: Request) {
         );
 
         let processed = 0;
-        const BATCH_SIZE = 3; // Process 3 resumes concurrently
+        const BATCH_SIZE = 5; // Process 5 resumes concurrently for faster evaluation
 
         // Helper to send a message
         const send = (msg: Record<string, unknown>) => {
