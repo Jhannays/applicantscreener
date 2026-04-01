@@ -5,7 +5,8 @@ const nextConfig = {
       bodySizeLimit: "50mb",
     },
   },
-  // Webpack config to handle pdf-parse
+  // Use webpack for pdf-parse compatibility
+  turbopack: {},
   webpack: (config) => {
     config.resolve.alias.canvas = false;
     return config;
